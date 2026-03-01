@@ -315,7 +315,7 @@ defmodule CookbookWeb.CoreComponents do
 
   def header(assigns) do
     ~H"""
-    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
+    <header class={[@actions != [] && "flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6", "pb-4"]}>
       <div>
         <h1 class="text-xl font-bold leading-8 text-base-content">
           {render_slot(@inner_block)}

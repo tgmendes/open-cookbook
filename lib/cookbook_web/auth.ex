@@ -5,6 +5,7 @@ defmodule CookbookWeb.Auth do
   """
 
   import Phoenix.Component, only: [assign: 2]
+  import Phoenix.LiveView, only: [attach_hook: 4]
   use CookbookWeb, :verified_routes
 
   alias Cookbook.Accounts
@@ -24,7 +25,14 @@ defmodule CookbookWeb.Auth do
             {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/login")}
 
           user ->
-            {:cont, assign(socket, current_user: user)}
+            socket =
+              socket
+              |> assign(current_user: user)
+              |> attach_hook(:set_nav_path, :handle_params, fn _params, uri, socket ->
+                {:cont, assign(socket, :nav_path, URI.parse(uri).path)}
+              end)
+
+            {:cont, socket}
         end
     end
   end
