@@ -257,7 +257,7 @@ defmodule CookbookWeb.RecipeFormLive do
         >
           <.icon name={icon} class="size-4" />
           <span class="hidden sm:inline">{label}</span>
-          <span class="sm:hidden">{if label == "Import URL", do: "URL", else: if label == "Generate AI", do: "AI", else: label}</span>
+          <span class="sm:hidden">{if(label == "Import URL", do: "URL", else: if(label == "Generate AI", do: "AI", else: label))}</span>
         </button>
       </div>
 

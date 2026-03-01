@@ -4,7 +4,7 @@ defmodule CookbookWeb.Auth do
   Provides on_mount hooks and session helpers.
   """
 
-  import Phoenix.Component, only: [assign: 2]
+  import Phoenix.Component, only: [assign: 2, assign: 3]
   import Phoenix.LiveView, only: [attach_hook: 4]
   use CookbookWeb, :verified_routes
 
