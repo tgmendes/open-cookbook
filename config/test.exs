@@ -27,6 +27,9 @@ config :cookbook, Cookbook.Mailer, adapter: Swoosh.Adapters.Test
 # Disable swoosh api client as it is only required for production adapters
 config :swoosh, :api_client, false
 
+# Set allowed email for testing
+config :cookbook, allowed_email: "test@example.com"
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

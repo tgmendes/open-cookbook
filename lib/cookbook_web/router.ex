@@ -1,6 +1,8 @@
 defmodule CookbookWeb.Router do
   use CookbookWeb, :router
 
+  import CookbookWeb.Auth, only: [fetch_current_user: 2, require_authenticated_user: 2]
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -8,30 +10,45 @@ defmodule CookbookWeb.Router do
     plug :put_root_layout, html: {CookbookWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :fetch_current_user
   end
 
   pipeline :api do
     plug :accepts, ["json"]
   end
 
+  # Health check (no auth, no browser pipeline)
+  scope "/", CookbookWeb do
+    pipe_through :api
+    get "/health", HealthController, :index
+  end
+
+  # Public routes (no auth required)
   scope "/", CookbookWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/login", LoginLive, :index
+    get "/auth/callback", AuthController, :callback
+    get "/auth/logout", AuthController, :logout
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", CookbookWeb do
-  #   pipe_through :api
-  # end
+  # Authenticated routes
+  scope "/", CookbookWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
+    live_session :authenticated, on_mount: {CookbookWeb.Auth, :require_auth} do
+      live "/", DashboardLive, :index
+      live "/recipes", RecipeListLive, :index
+      live "/recipes/new", RecipeFormLive, :new
+      live "/recipes/:id", RecipeShowLive, :show
+      live "/recipes/:id/edit", RecipeFormLive, :edit
+      live "/planner", PlannerLive, :index
+      live "/planner/shopping", ShoppingListLive, :index
+    end
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:cookbook, :dev_routes) do
-    # If you want to use the LiveDashboard in production, you should put
-    # it behind authentication and allow only admins to access it.
-    # If your application does not have an admins-only section yet,
-    # you can use Plug.BasicAuth to set up some basic authentication
-    # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do
