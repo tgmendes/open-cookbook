@@ -251,12 +251,13 @@ defmodule CookbookWeb.RecipeFormLive do
           phx-click="switch_tab"
           phx-value-tab={tab}
           class={[
-            "flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors",
+            "flex items-center justify-center gap-1 sm:gap-2 py-3 text-xs sm:text-sm font-medium transition-colors",
             @tab == tab && "bg-primary text-white" || "bg-base-200 text-base-content/60 hover:bg-base-200"
           ]}
         >
           <.icon name={icon} class="size-4" />
-          {label}
+          <span class="hidden sm:inline">{label}</span>
+          <span class="sm:hidden">{if label == "Import URL", do: "URL", else: if label == "Generate AI", do: "AI", else: label}</span>
         </button>
       </div>
 
@@ -297,7 +298,7 @@ defmodule CookbookWeb.RecipeFormLive do
             <h3 class="font-semibold text-base">Basic Information</h3>
             <.input field={@form[:title]} type="text" label="Title" required />
             <.input field={@form[:description]} type="textarea" label="Description" />
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <.input field={@form[:servings]} type="number" label="Servings" />
               <.input field={@form[:prep_time_minutes]} type="number" label="Prep time (min)" />
               <.input field={@form[:cook_time_minutes]} type="number" label="Cook time (min)" />
@@ -333,14 +334,14 @@ defmodule CookbookWeb.RecipeFormLive do
             </div>
             <.inputs_for :let={ing_form} field={@form[:ingredients]}>
               <input type="hidden" name="recipe[ingredients_sort][]" value={ing_form.index} />
-              <div class="flex gap-2 mb-3 items-end">
-                <div class="w-20">
+              <div class="flex flex-wrap sm:flex-nowrap gap-2 mb-3 items-end">
+                <div class="w-[calc(50%-0.25rem)] sm:w-20">
                   <.input field={ing_form[:quantity]} type="text" placeholder="Qty" />
                 </div>
-                <div class="w-20">
+                <div class="w-[calc(50%-0.25rem)] sm:w-20">
                   <.input field={ing_form[:unit]} type="text" placeholder="Unit" />
                 </div>
-                <div class="flex-1">
+                <div class="flex-1 min-w-0">
                   <.input field={ing_form[:name]} type="text" placeholder="Ingredient name" />
                 </div>
                 <input type="hidden" name="recipe[ingredients_drop][]" />
@@ -377,24 +378,26 @@ defmodule CookbookWeb.RecipeFormLive do
                 <div class="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white text-xs font-bold shrink-0 mt-1">
                   {step_form.index + 1}
                 </div>
-                <div class="flex-1">
+                <div class="flex-1 min-w-0 space-y-2">
                   <.input field={step_form[:instruction]} type="textarea" placeholder="Describe this step..." />
+                  <div class="flex items-center gap-2">
+                    <div class="w-24">
+                      <.input field={step_form[:duration_minutes]} type="number" placeholder="Min" />
+                    </div>
+                    <input type="hidden" name="recipe[steps_drop][]" />
+                    <label class="cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="recipe[steps_drop][]"
+                        value={step_form.index}
+                        class="hidden"
+                      />
+                      <span class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-error/10 text-base-content/30 hover:text-error transition-colors">
+                        <.icon name="hero-trash" class="size-4" />
+                      </span>
+                    </label>
+                  </div>
                 </div>
-                <div class="w-24">
-                  <.input field={step_form[:duration_minutes]} type="number" placeholder="Min" />
-                </div>
-                <input type="hidden" name="recipe[steps_drop][]" />
-                <label class="cursor-pointer mt-1">
-                  <input
-                    type="checkbox"
-                    name="recipe[steps_drop][]"
-                    value={step_form.index}
-                    class="hidden"
-                  />
-                  <span class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-error/10 text-base-content/30 hover:text-error transition-colors">
-                    <.icon name="hero-trash" class="size-4" />
-                  </span>
-                </label>
               </div>
             </.inputs_for>
             <input type="hidden" name="recipe[steps_drop][]" />
