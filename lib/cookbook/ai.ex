@@ -1,7 +1,7 @@
 defmodule Cookbook.AI do
   @moduledoc """
   The AI context. Handles recipe scraping, generation, and meal plan suggestions
-  using the Claude API.
+  using the OpenRouter API.
   """
 
   alias Cookbook.AI.{Client, Prompts}

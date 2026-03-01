@@ -32,7 +32,7 @@ defmodule CookbookWeb.LoginLive do
     email =
       new()
       |> to(user.email)
-      |> from({"Cookbook", "noreply@cookbook.local"})
+      |> from({"Cookbook", System.get_env("MAIL_FROM", "onboarding@resend.dev")})
       |> subject("Your magic login link")
       |> text_body("Click here to log in: #{magic_link}\n\nThis link expires in 10 minutes.")
       |> html_body("""

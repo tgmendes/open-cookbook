@@ -11,7 +11,7 @@ config :cookbook,
   ecto_repos: [Cookbook.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true],
   allowed_email: System.get_env("ALLOWED_EMAIL"),
-  anthropic_api_key: System.get_env("ANTHROPIC_API_KEY")
+  openrouter_api_key: System.get_env("OPENROUTER_API_KEY")
 
 # Configure the endpoint
 config :cookbook, CookbookWeb.Endpoint,

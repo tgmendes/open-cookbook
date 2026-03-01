@@ -143,9 +143,26 @@ defmodule CookbookWeb.RecipeFormLive do
   def handle_info({:ai_result, {:error, reason}}, socket) do
     msg =
       case reason do
-        :missing_api_key -> "ANTHROPIC_API_KEY is not configured."
-        {:http_error, status} -> "Failed to fetch URL (HTTP #{status})."
-        _ -> "AI request failed. Please try again."
+        :missing_api_key ->
+          "OPENROUTER_API_KEY is not configured."
+
+        {:http_error, status} ->
+          "Failed to fetch URL (HTTP #{status})."
+
+        {:api_error, status, %{"error" => %{"message" => message}}} ->
+          "AI error (#{status}): #{message}"
+
+        {:api_error, status, _body} ->
+          "AI request failed with status #{status}."
+
+        {:request_failed, reason} ->
+          "AI request failed: #{inspect(reason)}"
+
+        {:json_parse_error, _text} ->
+          "Failed to parse AI response. Please try again."
+
+        _ ->
+          "AI request failed. Please try again."
       end
 
     {:noreply,

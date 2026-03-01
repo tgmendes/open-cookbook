@@ -1,16 +1,19 @@
 defmodule Cookbook.AI.Client do
   @moduledoc """
-  HTTP client wrapper for the Claude API.
+  HTTP client wrapper for the OpenRouter API.
   """
 
-  @api_url "https://api.anthropic.com/v1/messages"
-  @model "claude-sonnet-4-20250514"
+  @api_url "https://openrouter.ai/api/v1/chat/completions"
+  @model "anthropic/claude-sonnet-4"
   @max_tokens 4096
+
+  require Logger
 
   def chat(system_prompt, user_message, opts \\ []) do
     api_key = api_key()
 
     if is_nil(api_key) || api_key == "" do
+      Logger.warning("OpenRouter API key is missing")
       {:error, :missing_api_key}
     else
       model = Keyword.get(opts, :model, @model)
@@ -20,24 +23,32 @@ defmodule Cookbook.AI.Client do
         Jason.encode!(%{
           model: model,
           max_tokens: max_tokens,
-          system: system_prompt,
-          messages: [%{role: "user", content: user_message}]
+          messages: [
+            %{role: "system", content: system_prompt},
+            %{role: "user", content: user_message}
+          ]
         })
 
       headers = [
         {"content-type", "application/json"},
-        {"x-api-key", api_key},
-        {"anthropic-version", "2023-06-01"}
+        {"authorization", "Bearer #{api_key}"}
       ]
 
-      case Req.post(@api_url, body: body, headers: headers, receive_timeout: 60_000) do
+      Logger.debug("Calling OpenRouter API with model: #{model}")
+
+      result = Req.post(@api_url, body: body, headers: headers, receive_timeout: 60_000)
+
+      case result do
         {:ok, %{status: 200, body: response_body}} ->
+          Logger.debug("OpenRouter API success")
           extract_text(response_body)
 
         {:ok, %{status: status, body: response_body}} ->
+          Logger.error("OpenRouter API error: #{status} - #{inspect(response_body)}")
           {:error, {:api_error, status, response_body}}
 
         {:error, reason} ->
+          Logger.error("OpenRouter API request failed: #{inspect(reason)}")
           {:error, {:request_failed, reason}}
       end
     end
@@ -50,8 +61,8 @@ defmodule Cookbook.AI.Client do
     end
   end
 
-  defp extract_text(%{"content" => [%{"type" => "text", "text" => text} | _]}) do
-    {:ok, text}
+  defp extract_text(%{"choices" => [%{"message" => %{"content" => content}} | _]}) do
+    {:ok, content}
   end
 
   defp extract_text(other) do
@@ -73,6 +84,6 @@ defmodule Cookbook.AI.Client do
   end
 
   defp api_key do
-    Application.get_env(:cookbook, :anthropic_api_key)
+    Application.get_env(:cookbook, :openrouter_api_key)
   end
 end

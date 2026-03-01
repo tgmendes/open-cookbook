@@ -35,3 +35,6 @@ cookbook-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Local environment secrets
+.env
+

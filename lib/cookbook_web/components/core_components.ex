@@ -90,6 +90,7 @@ defmodule CookbookWeb.CoreComponents do
   """
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
   attr :class, :any
+  attr :type, :string, default: "button"
   attr :variant, :string, values: ~w(primary)
   slot :inner_block, required: true
 
@@ -109,7 +110,7 @@ defmodule CookbookWeb.CoreComponents do
       """
     else
       ~H"""
-      <button class={@class} {@rest}>
+      <button type={@type} class={@class} {@rest}>
         {render_slot(@inner_block)}
       </button>
       """

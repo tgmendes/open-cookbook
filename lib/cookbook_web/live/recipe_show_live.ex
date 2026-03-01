@@ -25,6 +25,9 @@ defmodule CookbookWeb.RecipeShowLive do
         </:subtitle>
         <:actions>
           <div class="flex gap-2">
+            <.button :if={@recipe.steps != []} navigate={~p"/recipes/#{@recipe.id}/cook"} variant="primary">
+              <.icon name="hero-play-solid" class="size-4 mr-1" /> Cook
+            </.button>
             <.button navigate={~p"/recipes/#{@recipe.id}/edit"}>
               <.icon name="hero-pencil-square" class="size-4 mr-1" /> Edit
             </.button>
