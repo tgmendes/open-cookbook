@@ -10,12 +10,29 @@ defmodule Cookbook.AI do
   Scrapes a recipe from a URL by fetching its HTML and sending to Claude for extraction.
   Returns `{:ok, recipe_attrs}` or `{:error, reason}`.
   """
-  def scrape_recipe_from_url(url) do
+  def scrape_recipe_from_url(url, unit_system \\ "metric") do
     with {:ok, html} <- fetch_url(url),
          # Truncate to avoid exceeding token limits
          truncated = String.slice(html, 0, 100_000),
-         {:ok, data} <- Client.chat_json(Prompts.scrape_recipe(), "Extract the recipe from this HTML:\n\n#{truncated}") do
+         {:ok, data} <- Client.chat_json(Prompts.scrape_recipe(unit_system), "Extract the recipe from this HTML:\n\n#{truncated}") do
       {:ok, normalize_recipe_attrs(data, %{"source_url" => url, "source_type" => "scraped"})}
+    end
+  end
+
+  @doc """
+  Suggests 3 recipe alternatives based on a user's description.
+  Returns `{:ok, [%{"title" => ..., "description" => ...}, ...]}` or `{:error, reason}`.
+  """
+  def suggest_recipes(prompt) do
+    case Client.chat_json(Prompts.suggest_recipes(), prompt) do
+      {:ok, %{"suggestions" => suggestions}} when is_list(suggestions) ->
+        {:ok, suggestions}
+
+      {:ok, _data} ->
+        {:error, :invalid_suggestions_format}
+
+      error ->
+        error
     end
   end
 
@@ -23,10 +40,52 @@ defmodule Cookbook.AI do
   Generates a recipe from a free-text prompt using Claude.
   Returns `{:ok, recipe_attrs}` or `{:error, reason}`.
   """
-  def generate_recipe(prompt) do
-    case Client.chat_json(Prompts.generate_recipe(), prompt) do
+  def generate_recipe(prompt, unit_system \\ "metric") do
+    case Client.chat_json(Prompts.generate_recipe(unit_system), prompt) do
       {:ok, data} ->
         {:ok, normalize_recipe_attrs(data, %{"source_type" => "generated"})}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Extracts a recipe from a base64-encoded image using Claude's vision capabilities.
+  Returns `{:ok, recipe_attrs}` or `{:error, reason}`.
+  """
+  def extract_recipe_from_image(image_base64, unit_system \\ "metric") do
+    case Client.chat_vision_json(
+           Prompts.recipe_from_image(unit_system),
+           "Extract the recipe from this image.",
+           image_base64
+         ) do
+      {:ok, data} ->
+        {:ok, normalize_recipe_attrs(data, %{"source_type" => "image"})}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Refines an existing recipe based on a user's change request.
+  Takes current recipe attrs (map) and a refinement request string.
+  Returns `{:ok, recipe_attrs}` or `{:error, reason}`.
+  """
+  def refine_recipe(current_attrs, refinement_request, unit_system \\ "metric") do
+    current_json = Jason.encode!(current_attrs)
+
+    prompt = """
+    Current recipe:
+    #{current_json}
+
+    Requested change: #{refinement_request}
+    """
+
+    case Client.chat_json(Prompts.refine_recipe(unit_system), prompt) do
+      {:ok, data} ->
+        {:ok, normalize_recipe_attrs(data, %{"source_type" => current_attrs["source_type"] || "generated"})}
 
       error ->
         error

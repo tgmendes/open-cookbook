@@ -69,6 +69,14 @@ defmodule CookbookWeb.Layouts do
               Planner
             </.link>
             <div class="w-px h-5 bg-base-content/10 mx-2"></div>
+            <button
+              phx-click="toggle_unit_system"
+              class="px-3 py-2 rounded-lg text-sm text-base-content/40 hover:text-base-content hover:bg-base-300/50 transition-all duration-200 flex items-center gap-1.5"
+              title={"Switch to #{if assigns[:current_user] && assigns[:current_user].unit_system == "metric", do: "imperial", else: "metric"} units"}
+            >
+              <.icon name="hero-scale" class="size-4" />
+              <span class="capitalize">{assigns[:current_user] && assigns[:current_user].unit_system || "metric"}</span>
+            </button>
             <a href="/auth/logout" class="px-3 py-2 rounded-lg text-sm text-base-content/40 hover:text-base-content hover:bg-base-300/50 transition-all duration-200">
               Log out
             </a>
@@ -119,6 +127,13 @@ defmodule CookbookWeb.Layouts do
             <.icon name="hero-calendar-days" class="size-4 mr-2 inline" /> Planner
           </.link>
           <div class="h-px bg-base-content/10 my-1"></div>
+          <button
+            phx-click="toggle_unit_system"
+            class="w-full text-left px-3.5 py-2.5 rounded-lg text-sm text-base-content/40 hover:text-base-content hover:bg-base-300/50 transition-all duration-200"
+          >
+            <.icon name="hero-scale" class="size-4 mr-2 inline" />
+            Units: <span class="capitalize">{assigns[:current_user] && assigns[:current_user].unit_system || "metric"}</span>
+          </button>
           <a href="/auth/logout" class="px-3.5 py-2.5 rounded-lg text-sm text-base-content/40 hover:text-base-content hover:bg-base-300/50 transition-all duration-200">
             <.icon name="hero-arrow-right-on-rectangle" class="size-4 mr-2 inline" /> Log out
           </a>
@@ -128,7 +143,7 @@ defmodule CookbookWeb.Layouts do
 
     <main class="px-4 py-8 sm:px-6 lg:px-8">
       <div class="mx-auto max-w-5xl">
-        {render_slot(@inner_block)}
+        {@inner_content}
       </div>
     </main>
 

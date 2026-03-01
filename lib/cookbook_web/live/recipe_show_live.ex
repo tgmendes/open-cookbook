@@ -69,8 +69,8 @@ defmodule CookbookWeb.RecipeShowLive do
                 <div class="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white text-sm font-bold shrink-0">
                   {idx}
                 </div>
-                <div class="flex-1 pt-1">
-                  <p class="text-base-content/80 leading-relaxed">{step.instruction}</p>
+                <div class="flex-1 min-w-0 pt-1">
+                  <p class="text-base-content/80 leading-relaxed break-words">{step.instruction}</p>
                   <p :if={step.duration_minutes} class="inline-flex items-center gap-1 text-sm text-base-content/50 mt-2">
                     <.icon name="hero-clock" class="size-3.5" />
                     ~{step.duration_minutes} min

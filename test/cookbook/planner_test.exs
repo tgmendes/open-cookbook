@@ -98,6 +98,35 @@ defmodule Cookbook.PlannerTest do
       sugar = Enum.find(list, &(&1.name == "sugar"))
       assert sugar.quantity == "400"
     end
+
+    test "sums fractional quantities", %{user: user} do
+      {:ok, recipe} =
+        Recipes.create_recipe(%{
+          "title" => "Fraction Recipe",
+          "user_id" => user.id,
+          "ingredients" => %{
+            "0" => %{"name" => "Pesto", "quantity" => "1/3", "unit" => "cup", "position" => "0"},
+            "1" => %{"name" => "Pepper", "quantity" => "1/2", "unit" => "tsp", "position" => "1"}
+          },
+          "steps" => %{
+            "0" => %{"instruction" => "Mix", "position" => "0"}
+          }
+        })
+
+      {:ok, plan} = Planner.get_or_create_plan_for_week(user.id, ~D[2026-03-02])
+
+      Planner.add_entry(plan, %{day_of_week: 1, meal_type: :lunch, recipe_id: recipe.id})
+      Planner.add_entry(plan, %{day_of_week: 2, meal_type: :dinner, recipe_id: recipe.id})
+      Planner.add_entry(plan, %{day_of_week: 3, meal_type: :lunch, recipe_id: recipe.id})
+
+      list = Planner.generate_shopping_list(plan.id)
+
+      pesto = Enum.find(list, &(&1.name == "pesto"))
+      assert pesto.quantity == "1"
+
+      pepper = Enum.find(list, &(&1.name == "pepper"))
+      assert pepper.quantity == "1.5"
+    end
   end
 
   describe "normalize_to_monday/1" do

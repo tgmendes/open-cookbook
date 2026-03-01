@@ -97,6 +97,12 @@ defmodule Cookbook.Accounts do
     :crypto.hash(:sha256, raw_token) |> Base.encode64()
   end
 
+  def update_user_unit_system(%User{} = user, unit_system) do
+    user
+    |> User.unit_system_changeset(%{unit_system: unit_system})
+    |> Repo.update()
+  end
+
   defp email_allowed?(email) do
     allowed = allowed_email()
     allowed != nil && String.downcase(String.trim(allowed)) == email

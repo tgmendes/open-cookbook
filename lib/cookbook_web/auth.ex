@@ -31,6 +31,22 @@ defmodule CookbookWeb.Auth do
               |> attach_hook(:set_nav_path, :handle_params, fn _params, uri, socket ->
                 {:cont, assign(socket, :nav_path, URI.parse(uri).path)}
               end)
+              |> attach_hook(:toggle_unit_system, :handle_event, fn
+                "toggle_unit_system", _params, socket ->
+                  current = socket.assigns.current_user
+                  new_system = if current.unit_system == "metric", do: "imperial", else: "metric"
+
+                  case Accounts.update_user_unit_system(current, new_system) do
+                    {:ok, updated_user} ->
+                      {:halt, assign(socket, current_user: updated_user)}
+
+                    {:error, _} ->
+                      {:halt, socket}
+                  end
+
+                _event, _params, socket ->
+                  {:cont, socket}
+              end)
 
             {:cont, socket}
         end

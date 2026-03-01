@@ -19,6 +19,18 @@ defmodule Cookbook.Planner do
 
   def day_name(day_of_week), do: Map.get(@day_names, day_of_week, "")
 
+  @short_day_names %{
+    1 => "Mon",
+    2 => "Tue",
+    3 => "Wed",
+    4 => "Thu",
+    5 => "Fri",
+    6 => "Sat",
+    7 => "Sun"
+  }
+
+  def short_day_name(day_of_week), do: Map.get(@short_day_names, day_of_week, "")
+
   @doc """
   Gets or creates a meal plan for a given week (identified by the Monday date).
   """
@@ -153,14 +165,49 @@ defmodule Cookbook.Planner do
   defp numeric?(""), do: false
 
   defp numeric?(str) do
-    case Float.parse(str) do
-      {_, ""} -> true
-      _ -> false
+    str = String.trim(str)
+    # Match: "2", "0.5", "1/3", "1 1/2"
+    Regex.match?(~r/^\d+(\.\d+)?$/, str) ||
+      Regex.match?(~r/^\d+\/\d+$/, str) ||
+      Regex.match?(~r/^\d+\s+\d+\/\d+$/, str)
+  end
+
+  defp parse_number(nil), do: 0.0
+  defp parse_number(""), do: 0.0
+
+  defp parse_number(str) do
+    str = String.trim(str)
+
+    cond do
+      # Mixed fraction: "1 1/2"
+      Regex.match?(~r/^\d+\s+\d+\/\d+$/, str) ->
+        [whole, frac] = String.split(str, ~r/\s+/, parts: 2)
+        parse_float(whole) + parse_fraction(frac)
+
+      # Simple fraction: "1/3"
+      Regex.match?(~r/^\d+\/\d+$/, str) ->
+        parse_fraction(str)
+
+      # Regular number
+      true ->
+        parse_float(str)
     end
   end
 
-  defp parse_number(str) do
-    case Float.parse(str || "0") do
+  defp parse_fraction(str) do
+    case String.split(str, "/") do
+      [num, den] ->
+        n = parse_float(num)
+        d = parse_float(den)
+        if d == 0.0, do: 0.0, else: n / d
+
+      _ ->
+        0.0
+    end
+  end
+
+  defp parse_float(str) do
+    case Float.parse(str) do
       {n, _} -> n
       :error -> 0.0
     end

@@ -15,6 +15,10 @@ defmodule CookbookWeb.PlannerLive do
     nav = Planner.week_navigation(week_start)
     recipes = Recipes.list_recipes(socket.assigns.current_user.id)
 
+    today_dow = Date.day_of_week(Date.utc_today())
+    current_week_monday = Planner.normalize_to_monday(Date.utc_today())
+    selected_day = if week_start == current_week_monday, do: today_dow, else: 1
+
     {:ok,
      assign(socket,
        plan: plan,
@@ -24,7 +28,8 @@ defmodule CookbookWeb.PlannerLive do
        page_title: "Meal Planner",
        picker: nil,
        search: "",
-       ai_loading: false
+       ai_loading: false,
+       selected_day: selected_day
      )}
   end
 
@@ -38,7 +43,15 @@ defmodule CookbookWeb.PlannerLive do
     {:ok, plan} = Planner.get_or_create_plan_for_week(socket.assigns.current_user.id, week_start)
     nav = Planner.week_navigation(week_start)
 
-    {:noreply, assign(socket, plan: plan, week_start: week_start, nav: nav)}
+    today_dow = Date.day_of_week(Date.utc_today())
+    current_week_monday = Planner.normalize_to_monday(Date.utc_today())
+    selected_day = if week_start == current_week_monday, do: today_dow, else: 1
+
+    {:noreply, assign(socket, plan: plan, week_start: week_start, nav: nav, selected_day: selected_day)}
+  end
+
+  def handle_event("select_day", %{"day" => day}, socket) do
+    {:noreply, assign(socket, selected_day: String.to_integer(day))}
   end
 
   def handle_event("open_picker", %{"day" => day, "meal" => meal}, socket) do
@@ -153,6 +166,10 @@ defmodule CookbookWeb.PlannerLive do
     Date.add(week_start, day - 1) == Date.utc_today()
   end
 
+  defp day_has_meals?(plan, day) do
+    Enum.any?(plan.entries || [], &(&1.day_of_week == day))
+  end
+
   def render(assigns) do
     ~H"""
     <div>
@@ -196,66 +213,31 @@ defmodule CookbookWeb.PlannerLive do
         </.link>
       </div>
 
-      <%!-- Week grid --%>
-      <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
-        <div
-          :for={day <- 1..7}
-          class={[
-            "rounded-xl border bg-base-200 overflow-hidden transition-all duration-300",
-            is_today?(@week_start, day) && "border-primary ring-2 ring-primary/20" || "border-base-300/50 hover:border-base-300"
-          ]}
-        >
-          <%!-- Day header --%>
-          <div class={[
-            "text-center py-2 border-b",
-            is_today?(@week_start, day) && "bg-primary/5 border-primary/20" || "bg-base-100 border-base-200"
-          ]}>
-            <div class={[
-              "text-xs font-medium uppercase tracking-wider",
-              is_today?(@week_start, day) && "text-primary" || "text-base-content/50"
-            ]}>
-              {Planner.day_name(day)}
-            </div>
-            <div class={[
-              "text-2xl font-bold",
-              is_today?(@week_start, day) && "text-primary" || "text-base-content"
-            ]}>
-              {Calendar.strftime(Date.add(@week_start, day - 1), "%d")}
-            </div>
-          </div>
-
-          <%!-- Meals --%>
-          <div class="p-2">
-            <div :for={meal <- [:lunch, :dinner]} class="mb-3 last:mb-0">
-              <div class="text-[10px] font-semibold text-base-content/40 uppercase tracking-wider mb-1">
-                {meal}
-              </div>
-              <div :for={entry <- entries_for(@plan, day, meal)} class="flex items-center gap-1 mb-1 group">
-                <.link navigate={~p"/recipes/#{entry.recipe.id}"} class="text-xs hover:text-primary flex-1 truncate transition-colors">
-                  {entry.recipe.title}
-                </.link>
-                <button
-                  phx-click="remove_entry"
-                  phx-value-entry-id={entry.id}
-                  class="text-base-content/20 hover:text-error text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <.icon name="hero-x-mark" class="size-3.5" />
-                </button>
-              </div>
-              <button
-                phx-click="open_picker"
-                phx-value-day={day}
-                phx-value-meal={meal}
-                class="text-xs text-primary/60 hover:text-primary w-full text-left transition-colors"
-              >
-                + add
-              </button>
-            </div>
-          </div>
-        </div>
+      <%!-- MOBILE: Day strip + single-day detail (visible below md) --%>
+      <div class="md:hidden">
+        <.day_strip
+          week_start={@week_start}
+          selected_day={@selected_day}
+          plan={@plan}
+        />
+        <.day_detail
+          week_start={@week_start}
+          selected_day={@selected_day}
+          plan={@plan}
+        />
       </div>
 
-      <%!-- Recipe picker modal --%>
+      <%!-- DESKTOP: Horizontal day rows (visible at md+) --%>
+      <div class="hidden md:flex md:flex-col gap-2">
+        <.day_row
+          :for={day <- 1..7}
+          week_start={@week_start}
+          day={day}
+          plan={@plan}
+        />
+      </div>
+
+      <%!-- Recipe picker modal (unchanged) --%>
       <div :if={@picker} class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" phx-click="close_picker">
         <div class="bg-base-200 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto" phx-click-away="close_picker">
           <div class="flex items-center justify-between mb-4">
@@ -302,6 +284,199 @@ defmodule CookbookWeb.PlannerLive do
             </button>
           </div>
         </div>
+      </div>
+    </div>
+    """
+  end
+
+  # ── Mobile Components ──────────────────────────────────────────────
+
+  defp day_strip(assigns) do
+    ~H"""
+    <div class="flex gap-1.5 overflow-x-auto pb-3 px-1 -mx-1 scrollbar-none">
+      <button
+        :for={day <- 1..7}
+        phx-click="select_day"
+        phx-value-day={day}
+        class={[
+          "flex flex-col items-center flex-shrink-0 w-12 py-2 rounded-xl border transition-all duration-200",
+          cond do
+            day == @selected_day && is_today?(@week_start, day) ->
+              "bg-primary text-primary-content border-primary ring-2 ring-primary/20"
+            day == @selected_day ->
+              "bg-primary text-primary-content border-primary"
+            is_today?(@week_start, day) ->
+              "bg-base-200 border-primary/40 text-primary"
+            true ->
+              "bg-base-200 border-base-300/50 text-base-content"
+          end
+        ]}
+      >
+        <span class="text-[10px] font-semibold uppercase tracking-wider">
+          {Planner.short_day_name(day)}
+        </span>
+        <span class="text-lg font-bold leading-tight">
+          {Calendar.strftime(Date.add(@week_start, day - 1), "%d")}
+        </span>
+        <span
+          :if={day_has_meals?(@plan, day)}
+          class={[
+            "w-1.5 h-1.5 rounded-full mt-0.5",
+            if(day == @selected_day, do: "bg-primary-content/60", else: "bg-primary/60")
+          ]}
+        />
+      </button>
+    </div>
+    """
+  end
+
+  defp day_detail(assigns) do
+    assigns = assign(assigns, :day, assigns.selected_day)
+
+    ~H"""
+    <div class="mt-2 space-y-3">
+      <div class="text-sm font-semibold text-base-content/60">
+        {Planner.day_name(@day)}, {Calendar.strftime(Date.add(@week_start, @day - 1), "%B %d")}
+      </div>
+
+      <div :for={meal <- [:lunch, :dinner]} class="space-y-2">
+        <div class="text-xs font-semibold text-base-content/40 uppercase tracking-wider">
+          {meal}
+        </div>
+
+        <%!-- Existing entries --%>
+        <div
+          :for={entry <- entries_for(@plan, @day, meal)}
+          class="flex items-center gap-3 rounded-xl border border-base-300/50 bg-base-200 px-4 py-3"
+        >
+          <.link navigate={~p"/recipes/#{entry.recipe.id}"} class="text-sm font-medium hover:text-primary flex-1 transition-colors">
+            {entry.recipe.title}
+          </.link>
+          <button
+            phx-click="remove_entry"
+            phx-value-entry-id={entry.id}
+            class="flex items-center justify-center w-8 h-8 rounded-full text-base-content/30 hover:text-error hover:bg-error/10 transition-colors"
+          >
+            <.icon name="hero-x-mark" class="size-4" />
+          </button>
+        </div>
+
+        <%!-- Add button --%>
+        <button
+          :if={entries_for(@plan, @day, meal) == []}
+          phx-click="open_picker"
+          phx-value-day={@day}
+          phx-value-meal={meal}
+          class="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-base-300/50 hover:border-primary/40 text-base-content/30 hover:text-primary py-4 transition-colors"
+        >
+          <.icon name="hero-plus" class="size-4" />
+          <span class="text-sm">Add {meal}</span>
+        </button>
+        <button
+          :if={entries_for(@plan, @day, meal) != []}
+          phx-click="open_picker"
+          phx-value-day={@day}
+          phx-value-meal={meal}
+          class="w-full flex items-center justify-center gap-1 text-xs text-primary/50 hover:text-primary py-1 transition-colors"
+        >
+          <.icon name="hero-plus" class="size-3" />
+          <span>Add another</span>
+        </button>
+      </div>
+    </div>
+    """
+  end
+
+  # ── Desktop Components ─────────────────────────────────────────────
+
+  defp day_row(assigns) do
+    ~H"""
+    <div class={[
+      "flex items-stretch rounded-xl border overflow-hidden transition-all duration-200",
+      if(is_today?(@week_start, @day),
+        do: "border-primary ring-2 ring-primary/20",
+        else: "border-base-300/50 hover:border-base-300"
+      )
+    ]}>
+      <%!-- Day label --%>
+      <div class={[
+        "w-20 flex-shrink-0 flex flex-col items-center justify-center py-3 border-r",
+        if(is_today?(@week_start, @day),
+          do: "bg-primary/5 border-primary/20",
+          else: "bg-base-100 border-base-200"
+        )
+      ]}>
+        <span class={[
+          "text-xs font-semibold uppercase tracking-wider",
+          if(is_today?(@week_start, @day), do: "text-primary", else: "text-base-content/50")
+        ]}>
+          {Planner.short_day_name(@day)}
+        </span>
+        <span class={[
+          "text-2xl font-bold leading-tight",
+          if(is_today?(@week_start, @day), do: "text-primary", else: "text-base-content")
+        ]}>
+          {Calendar.strftime(Date.add(@week_start, @day - 1), "%d")}
+        </span>
+      </div>
+
+      <%!-- Meal slots --%>
+      <div class="flex flex-1 min-w-0 divide-x divide-base-200 bg-base-200">
+        <.meal_slot :for={meal <- [:lunch, :dinner]} day={@day} meal={meal} plan={@plan} />
+      </div>
+    </div>
+    """
+  end
+
+  defp meal_slot(assigns) do
+    entries = entries_for(assigns.plan, assigns.day, assigns.meal)
+    assigns = assign(assigns, :entries, entries)
+
+    ~H"""
+    <div class="flex-1 min-w-0 px-4 py-3">
+      <div class="text-[10px] font-semibold text-base-content/40 uppercase tracking-wider mb-1.5">
+        {@meal}
+      </div>
+
+      <%!-- Empty state: entire area is clickable --%>
+      <div
+        :if={@entries == []}
+        phx-click="open_picker"
+        phx-value-day={@day}
+        phx-value-meal={@meal}
+        class="text-sm text-base-content/20 italic cursor-pointer hover:text-primary/40 transition-colors py-1"
+      >
+        Click to add...
+      </div>
+
+      <%!-- Filled state: chips + small add button, no parent click handler --%>
+      <div :if={@entries != []} class="flex flex-wrap items-center gap-1.5">
+        <span
+          :for={entry <- @entries}
+          class="inline-flex items-center gap-1 bg-base-100 rounded-lg px-2.5 py-1 text-sm max-w-full"
+        >
+          <.link
+            navigate={~p"/recipes/#{entry.recipe.id}"}
+            class="hover:text-primary truncate transition-colors"
+          >
+            {entry.recipe.title}
+          </.link>
+          <button
+            phx-click="remove_entry"
+            phx-value-entry-id={entry.id}
+            class="flex-shrink-0 text-base-content/30 hover:text-error transition-colors ml-0.5"
+          >
+            <.icon name="hero-x-mark" class="size-3.5" />
+          </button>
+        </span>
+        <button
+          phx-click="open_picker"
+          phx-value-day={@day}
+          phx-value-meal={@meal}
+          class="inline-flex items-center justify-center w-7 h-7 rounded-lg text-base-content/20 hover:text-primary hover:bg-base-300/50 transition-colors"
+        >
+          <.icon name="hero-plus" class="size-3.5" />
+        </button>
       </div>
     </div>
     """
