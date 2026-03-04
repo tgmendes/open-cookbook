@@ -119,8 +119,17 @@ defmodule CookbookWeb.CookModeLive do
     {:noreply, socket}
   end
 
+  defp matched_ingredients(step, ingredients) do
+    Enum.filter(ingredients, fn ingredient ->
+      pattern = ~r/\b#{Regex.escape(ingredient.name)}\b/i
+      Regex.match?(pattern, step.instruction)
+    end)
+  end
+
   def render(assigns) do
     assigns = assign(assigns, :step, Enum.at(assigns.steps, assigns.current_step))
+    ingredients = assigns.adjusted_ingredients || assigns.recipe.ingredients
+    assigns = assign(assigns, :step_ingredients, matched_ingredients(assigns.step, ingredients))
 
     ~H"""
     <div class="fixed inset-0 z-50 bg-base-100 flex flex-col" phx-window-keydown="keydown">
@@ -181,6 +190,17 @@ defmodule CookbookWeb.CookModeLive do
         <p class="text-2xl sm:text-3xl md:text-4xl leading-relaxed text-center max-w-3xl">
           {@step.instruction}
         </p>
+
+        <div :if={@step_ingredients != []} class="mt-6 flex flex-wrap justify-center gap-2">
+          <span
+            :for={ing <- @step_ingredients}
+            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-base-200 text-sm"
+          >
+            <span :if={ing.quantity && ing.quantity != ""} class="font-semibold text-primary">{ing.quantity}</span>
+            <span :if={ing.unit && ing.unit != ""} class="text-base-content/60">{ing.unit}</span>
+            <span>{ing.name}</span>
+          </span>
+        </div>
 
         <div
           :if={@step.duration_minutes}
