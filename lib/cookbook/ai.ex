@@ -93,6 +93,51 @@ defmodule Cookbook.AI do
   end
 
   @doc """
+  Adjusts ingredient quantities for a target serving count using AI.
+  Returns `{:ok, %{ingredients: [...], servings: integer}}` or `{:error, reason}`.
+  """
+  def adjust_quantities(recipe, target_servings, unit_system \\ "metric") do
+    current_attrs = %{
+      "servings" => recipe.servings,
+      "ingredients" =>
+        Enum.map(recipe.ingredients, fn ing ->
+          %{
+            "name" => ing.name,
+            "quantity" => ing.quantity || "",
+            "unit" => ing.unit || "",
+            "position" => ing.position
+          }
+        end)
+    }
+
+    prompt = """
+    Current recipe:
+    #{Jason.encode!(current_attrs)}
+
+    Requested change: Adjust to #{target_servings} servings, scaling all ingredient quantities proportionally.
+    """
+
+    case Client.chat_json(Prompts.refine_recipe(unit_system), prompt) do
+      {:ok, data} ->
+        ingredients =
+          (data["ingredients"] || [])
+          |> Enum.sort_by(& &1["position"])
+          |> Enum.map(fn ing ->
+            %{
+              name: ing["name"] || "",
+              quantity: to_string(ing["quantity"] || ""),
+              unit: ing["unit"] || ""
+            }
+          end)
+
+        {:ok, %{ingredients: ingredients, servings: data["servings"] || target_servings}}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
   Suggests a weekly meal plan based on available recipes.
   Returns `{:ok, plan_data}` or `{:error, reason}`.
   """
