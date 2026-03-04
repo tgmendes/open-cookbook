@@ -56,7 +56,11 @@ defmodule CookbookWeb.RecipeFormLive do
           ai_error: nil,
           ai_feedback: nil,
           recipe_attrs: nil,
-          ai_suggestions: []
+          ai_suggestions: [],
+          creation_mode: :ai,
+          messages: [
+            %{role: :assistant, content: "What would you like to cook? Describe a recipe, paste a URL, or upload a photo."}
+          ]
         )
       else
         socket
@@ -71,9 +75,17 @@ defmodule CookbookWeb.RecipeFormLive do
     {:noreply, assign(socket, ai_input_text: text)}
   end
 
-  def handle_event("toggle_url_mode", _params, socket) do
-    new_mode = if socket.assigns.ai_input_mode == :describe, do: :url, else: :describe
-    {:noreply, assign(socket, ai_input_mode: new_mode)}
+  def handle_event("set_ai_input_mode", %{"mode" => mode}, socket) do
+    mode_atom = case mode do
+      "url" -> :url
+      "screenshot" -> :screenshot
+      _ -> :describe
+    end
+    {:noreply, assign(socket, ai_input_mode: mode_atom, ai_error: nil)}
+  end
+
+  def handle_event("set_creation_mode", %{"mode" => mode}, socket) do
+    {:noreply, assign(socket, creation_mode: if(mode == "manual", do: :manual, else: :ai))}
   end
 
   def handle_event("use_suggestion", %{"text" => text}, socket) do
@@ -99,13 +111,18 @@ defmodule CookbookWeb.RecipeFormLive do
             {:ok, Base.encode64(data)}
           end)
 
+        user_msg = %{role: :user, content: "Extract recipe from uploaded image"}
+        messages = socket.assigns.messages ++ [user_msg]
+
         socket =
           socket
           |> assign(
             ui_state: :loading,
             ai_loading: true,
             ai_loading_message: "Extracting from image...",
-            ai_error: nil
+            ai_error: nil,
+            messages: messages,
+            ai_input_text: ""
           )
 
         self_pid = self()
@@ -126,13 +143,18 @@ defmodule CookbookWeb.RecipeFormLive do
           |> List.first()
 
         if url do
+          user_msg = %{role: :user, content: "Import recipe from: #{url}"}
+          messages = socket.assigns.messages ++ [user_msg]
+
           socket =
             socket
             |> assign(
               ui_state: :loading,
               ai_loading: true,
               ai_loading_message: "Importing from URL...",
-              ai_error: nil
+              ai_error: nil,
+              messages: messages,
+              ai_input_text: ""
             )
 
           self_pid = self()
@@ -153,13 +175,18 @@ defmodule CookbookWeb.RecipeFormLive do
         if text == "" do
           {:noreply, assign(socket, ai_error: "Please describe what you'd like to cook.")}
         else
+          user_msg = %{role: :user, content: text}
+          messages = socket.assigns.messages ++ [user_msg]
+
           socket =
             socket
             |> assign(
               ui_state: :loading,
               ai_loading: true,
               ai_loading_message: "Finding recipe ideas...",
-              ai_error: nil
+              ai_error: nil,
+              messages: messages,
+              ai_input_text: ""
             )
 
           self_pid = self()
@@ -180,13 +207,17 @@ defmodule CookbookWeb.RecipeFormLive do
     prompt =
       "Create a recipe for: #{suggestion["title"]}. #{suggestion["description"]}"
 
+    user_msg = %{role: :user, content: "→ #{suggestion["title"]}"}
+    messages = socket.assigns.messages ++ [user_msg]
+
     socket =
       socket
       |> assign(
         ui_state: :loading,
         ai_loading: true,
         ai_loading_message: "Creating your recipe...",
-        ai_error: nil
+        ai_error: nil,
+        messages: messages
       )
 
     self_pid = self()
@@ -209,7 +240,10 @@ defmodule CookbookWeb.RecipeFormLive do
     if text == "" do
       {:noreply, socket}
     else
-      socket = assign(socket, ai_loading: true, ai_feedback: nil)
+      user_msg = %{role: :user, content: text}
+      messages = socket.assigns.messages ++ [user_msg]
+
+      socket = assign(socket, ai_loading: true, ai_feedback: nil, messages: messages)
       self_pid = self()
       attrs = socket.assigns.recipe_attrs
 
@@ -291,24 +325,32 @@ defmodule CookbookWeb.RecipeFormLive do
   # ── AI result handlers ──
 
   def handle_info({:ai_suggestions_result, {:ok, suggestions}}, socket) do
+    asst_msg = %{role: :assistant, content: "Here are #{length(suggestions)} recipe ideas — click one to get started:"}
+    messages = socket.assigns.messages ++ [asst_msg]
+
     {:noreply,
      socket
      |> assign(
        ui_state: :picking_suggestion,
        ai_suggestions: suggestions,
        ai_loading: false,
-       ai_loading_message: ""
+       ai_loading_message: "",
+       messages: messages
      )}
   end
 
   def handle_info({:ai_suggestions_result, {:error, reason}}, socket) do
+    asst_msg = %{role: :assistant, content: "Sorry, couldn't find recipe ideas. #{format_error(reason)}"}
+    messages = socket.assigns.messages ++ [asst_msg]
+
     {:noreply,
      socket
      |> assign(
        ui_state: :creator_input,
        ai_loading: false,
        ai_loading_message: "",
-       ai_error: format_error(reason)
+       ai_error: format_error(reason),
+       messages: messages
      )}
   end
 
@@ -317,13 +359,17 @@ defmodule CookbookWeb.RecipeFormLive do
   end
 
   def handle_info({:ai_result, {:error, reason}, _ref}, socket) do
+    asst_msg = %{role: :assistant, content: "Something went wrong: #{format_error(reason)}"}
+    messages = socket.assigns.messages ++ [asst_msg]
+
     {:noreply,
      socket
      |> assign(
        ui_state: :creator_input,
        ai_loading: false,
        ai_loading_message: "",
-       ai_error: format_error(reason)
+       ai_error: format_error(reason),
+       messages: messages
      )}
   end
 
@@ -332,11 +378,15 @@ defmodule CookbookWeb.RecipeFormLive do
   end
 
   def handle_info({:ai_refine_result, {:error, reason}}, socket) do
+    asst_msg = %{role: :assistant, content: "Couldn't refine: #{format_error(reason)}"}
+    messages = socket.assigns.messages ++ [asst_msg]
+
     {:noreply,
      socket
      |> assign(
        ai_loading: false,
-       ai_feedback: "Failed to refine: #{format_error(reason)}"
+       ai_feedback: "Failed to refine: #{format_error(reason)}",
+       messages: messages
      )}
   end
 
@@ -354,6 +404,10 @@ defmodule CookbookWeb.RecipeFormLive do
 
     changeset = Recipes.change_recipe(recipe, attrs)
 
+    asst_content = feedback || "Here's your recipe! Review and edit it, then save when you're happy."
+    asst_msg = %{role: :assistant, content: asst_content}
+    messages = socket.assigns.messages ++ [asst_msg]
+
     {:noreply,
      socket
      |> assign(
@@ -364,7 +418,8 @@ defmodule CookbookWeb.RecipeFormLive do
        recipe_attrs: attrs,
        ai_loading: false,
        ai_loading_message: "",
-       ai_feedback: feedback
+       ai_feedback: feedback,
+       messages: messages
      )}
   end
 
@@ -475,38 +530,333 @@ defmodule CookbookWeb.RecipeFormLive do
         </div>
       </div>
     <% else %>
-      <%= case @ui_state do %>
-        <% :creator_input -> %>
-          <.creator_input
-            ai_input_text={@ai_input_text}
-            ai_input_mode={@ai_input_mode}
-            ai_error={@ai_error}
-            uploads={@uploads}
-          />
-        <% :loading -> %>
-          <.loading_state message={@ai_loading_message} />
-        <% :picking_suggestion -> %>
-          <.suggestion_picker
-            suggestions={@ai_suggestions}
-            ai_input_text={@ai_input_text}
-          />
-        <% :recipe_ready -> %>
-          <.recipe_ready_state
-            form={@form}
-            action={@action}
-            recipe={@recipe}
-            tags_input={@tags_input}
-            uploads={@uploads}
-            ai_loading={@ai_loading}
-            ai_feedback={@ai_feedback}
-            unit_system={@current_user.unit_system}
-          />
-      <% end %>
+
+      <%!-- Mobile / tablet: single-column centered flow (hidden on lg+) --%>
+      <div class="lg:hidden">
+        <%= case @ui_state do %>
+          <% :creator_input -> %>
+            <.creator_input
+              ai_input_text={@ai_input_text}
+              ai_input_mode={@ai_input_mode}
+              ai_error={@ai_error}
+              uploads={@uploads}
+            />
+          <% :loading -> %>
+            <.loading_state message={@ai_loading_message} />
+          <% :picking_suggestion -> %>
+            <.suggestion_picker
+              suggestions={@ai_suggestions}
+              ai_input_text={@ai_input_text}
+            />
+          <% :recipe_ready -> %>
+            <.recipe_ready_state
+              form={@form}
+              action={@action}
+              recipe={@recipe}
+              tags_input={@tags_input}
+              uploads={@uploads}
+              ai_loading={@ai_loading}
+              ai_feedback={@ai_feedback}
+              unit_system={@current_user.unit_system}
+            />
+        <% end %>
+      </div>
+
+      <%!-- Desktop: two-column chat layout (hidden below lg) --%>
+      <div class="hidden lg:flex gap-6 items-start">
+
+        <%!-- Left: Chat / Manual panel --%>
+        <div class="w-96 shrink-0 flex flex-col rounded-2xl border border-base-300/50 bg-base-100 overflow-hidden sticky top-8 max-h-[calc(100vh-6rem)]">
+
+          <%!-- Mode tabs: Manual | AI Assist --%>
+          <div class="flex border-b border-base-300/50 bg-base-200/50 shrink-0">
+            <button
+              phx-click="set_creation_mode"
+              phx-value-mode="manual"
+              class={[
+                "flex-1 py-3 text-sm font-medium transition-colors border-b-2",
+                if(@creation_mode == :manual,
+                  do: "border-primary text-primary bg-base-100",
+                  else: "border-transparent text-base-content/50 hover:text-base-content"
+                )
+              ]}
+            >
+              Manual
+            </button>
+            <button
+              phx-click="set_creation_mode"
+              phx-value-mode="ai"
+              class={[
+                "flex-1 py-3 text-sm font-medium transition-colors border-b-2",
+                if(@creation_mode == :ai,
+                  do: "border-primary text-primary bg-base-100",
+                  else: "border-transparent text-base-content/50 hover:text-base-content"
+                )
+              ]}
+            >
+              AI Assist
+            </button>
+          </div>
+
+          <%= if @creation_mode == :ai do %>
+            <%!-- AI input sub-tabs: Chat | Link | Screenshot --%>
+            <div class="flex border-b border-base-300/30 bg-base-200/30 px-3 shrink-0">
+              <button
+                phx-click="set_ai_input_mode"
+                phx-value-mode="describe"
+                class={[
+                  "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                  if(@ai_input_mode == :describe,
+                    do: "border-primary text-primary",
+                    else: "border-transparent text-base-content/40 hover:text-base-content/70"
+                  )
+                ]}
+              >
+                Chat
+              </button>
+              <button
+                phx-click="set_ai_input_mode"
+                phx-value-mode="url"
+                class={[
+                  "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                  if(@ai_input_mode == :url,
+                    do: "border-primary text-primary",
+                    else: "border-transparent text-base-content/40 hover:text-base-content/70"
+                  )
+                ]}
+              >
+                Link
+              </button>
+              <button
+                phx-click="set_ai_input_mode"
+                phx-value-mode="screenshot"
+                class={[
+                  "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                  if(@ai_input_mode == :screenshot,
+                    do: "border-primary text-primary",
+                    else: "border-transparent text-base-content/40 hover:text-base-content/70"
+                  )
+                ]}
+              >
+                Screenshot
+              </button>
+            </div>
+
+            <%!-- Chat messages area --%>
+            <div
+              id="desktop-chat-messages"
+              class="flex-1 overflow-y-auto p-4 space-y-3"
+              phx-hook="ScrollToBottom"
+            >
+              <%!-- Message bubbles --%>
+              <div
+                :for={msg <- @messages}
+                class={["flex gap-2", if(msg.role == :user, do: "justify-end", else: "")]}
+              >
+                <div
+                  :if={msg.role == :assistant}
+                  class="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
+                >
+                  <.icon name="hero-sparkles" class="size-3.5 text-primary" />
+                </div>
+                <div class={[
+                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+                  if(msg.role == :user,
+                    do: "bg-primary text-primary-content rounded-tr-sm",
+                    else: "bg-base-200 text-base-content rounded-tl-sm"
+                  )
+                ]}>
+                  {msg.content}
+                </div>
+              </div>
+
+              <%!-- Suggestion cards (when picking) --%>
+              <div :if={@ui_state == :picking_suggestion} class="space-y-2 mt-2">
+                <button
+                  :for={{suggestion, index} <- Enum.with_index(@ai_suggestions)}
+                  phx-click="pick_suggestion"
+                  phx-value-index={index}
+                  class="w-full text-left rounded-xl border border-base-300/50 bg-base-200/60 hover:bg-base-200 hover:border-primary/30 p-3 transition-all group"
+                >
+                  <div class="font-medium text-sm group-hover:text-primary transition-colors">
+                    {suggestion["title"]}
+                  </div>
+                  <div class="text-xs text-base-content/50 mt-0.5 line-clamp-2">
+                    {suggestion["description"]}
+                  </div>
+                </button>
+              </div>
+
+              <%!-- Loading indicator --%>
+              <div :if={@ui_state == :loading} class="flex items-center gap-2 pl-9">
+                <div class="bg-base-200 rounded-2xl rounded-tl-sm px-3.5 py-2.5">
+                  <span class="loading loading-dots loading-xs text-primary"></span>
+                </div>
+              </div>
+            </div>
+
+            <%!-- Input area --%>
+            <div class="border-t border-base-300/50 p-3 shrink-0">
+              <%= if @ui_state == :recipe_ready do %>
+                <%!-- Refine bar --%>
+                <form phx-submit="ai_refine" class="flex gap-2">
+                  <div class="flex-1 relative">
+                    <div :if={@ai_loading} class="absolute right-2 top-1/2 -translate-y-1/2">
+                      <span class="loading loading-spinner loading-xs text-primary"></span>
+                    </div>
+                    <input
+                      type="text"
+                      name="refine_input"
+                      placeholder="Ask AI to refine — e.g. &quot;make it spicier&quot;..."
+                      class="w-full input input-sm pr-8"
+                      disabled={@ai_loading}
+                      autocomplete="off"
+                    />
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm" disabled={@ai_loading}>
+                    <.icon name="hero-paper-airplane" class="size-4" />
+                  </button>
+                </form>
+              <% else %>
+                <%= if @ui_state == :picking_suggestion do %>
+                  <%!-- Back button --%>
+                  <button
+                    phx-click="back_to_input"
+                    class="w-full text-center text-sm text-base-content/40 hover:text-base-content transition-colors py-1"
+                  >
+                    None of these — try a different description
+                  </button>
+                <% else %>
+                <%= if @ui_state != :loading do %>
+                <%!-- Main AI input --%>
+                <form
+                  id="creator-form-desktop"
+                  phx-submit="ai_submit"
+                  phx-change="validate-upload"
+                  class="space-y-2"
+                >
+                  <%!-- Error --%>
+                  <div :if={@ai_error} class="flex items-center gap-1.5 text-xs text-error">
+                    <.icon name="hero-exclamation-circle" class="size-3.5 shrink-0" />
+                    {@ai_error}
+                  </div>
+
+                  <%!-- Upload preview --%>
+                  <div
+                    :for={entry <- @uploads.recipe_image.entries}
+                    class="flex items-center gap-2 p-2 bg-base-200 rounded-lg"
+                  >
+                    <.live_img_preview entry={entry} class="w-10 h-10 object-cover rounded-md" />
+                    <span class="text-xs flex-1 truncate text-base-content/70">{entry.client_name}</span>
+                    <button
+                      type="button"
+                      phx-click="cancel-upload"
+                      phx-value-ref={entry.ref}
+                      class="text-base-content/30 hover:text-error transition-colors"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+
+                  <%= if @ai_input_mode == :screenshot do %>
+                    <%!-- Screenshot upload zone --%>
+                    <label class="flex flex-col items-center justify-center w-full h-24 rounded-xl border-2 border-dashed border-base-300/50 hover:border-primary/40 cursor-pointer transition-colors bg-base-200/40 hover:bg-base-200/60">
+                      <.icon name="hero-photo" class="size-6 text-base-content/30 mb-1" />
+                      <span class="text-xs text-base-content/40">Click to upload a recipe photo</span>
+                      <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload-desktop" />
+                    </label>
+                    <button
+                      type="submit"
+                      class="w-full btn btn-primary btn-sm gap-1.5"
+                      disabled={@uploads.recipe_image.entries == []}
+                    >
+                      <.icon name="hero-sparkles" class="size-4" />
+                      Extract Recipe
+                    </button>
+                  <% else %>
+                    <%!-- Chat / Link textarea --%>
+                    <div class="flex gap-2 items-end">
+                      <textarea
+                        name="ai_input"
+                        phx-keyup="ai_validate"
+                        rows="2"
+                        placeholder={if @ai_input_mode == :url, do: "Paste a recipe URL...", else: "Describe what you'd like to cook..."}
+                        class="flex-1 textarea textarea-bordered textarea-sm resize-none text-sm"
+                        autocomplete="off"
+                      >{@ai_input_text}</textarea>
+                      <button type="submit" class="btn btn-primary btn-sm h-auto py-2.5 px-3">
+                        <.icon name="hero-sparkles" class="size-4" />
+                      </button>
+                    </div>
+                    <div class="hidden">
+                      <.live_file_input upload={@uploads.recipe_image} id="recipe-image-upload-desktop-hidden" />
+                    </div>
+                  <% end %>
+                </form>
+
+                <%!-- Suggestion chips (chat mode only) --%>
+                <div :if={@ai_input_mode == :describe} class="flex flex-wrap gap-1.5 mt-2">
+                  <button
+                    :for={suggestion <- suggestions()}
+                    type="button"
+                    phx-click="use_suggestion"
+                    phx-value-text={suggestion}
+                    class="px-2.5 py-1 rounded-full text-xs border border-base-300/50 bg-base-200/40 text-base-content/60 hover:bg-base-200 hover:text-base-content transition-all"
+                  >
+                    {suggestion}
+                  </button>
+                </div>
+                <% end %>
+                <% end %>
+              <% end %>
+            </div>
+
+          <% else %>
+            <%!-- Manual mode info --%>
+            <div class="flex-1 flex items-center justify-center p-8 text-center text-base-content/30">
+              <div>
+                <.icon name="hero-pencil-square" class="size-10 mx-auto mb-3 text-base-content/20" />
+                <p class="text-sm font-medium">Fill in the form on the right</p>
+                <p class="text-xs mt-1">Add your recipe details manually</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <%!-- Right: Recipe form or placeholder --%>
+        <div class="flex-1 min-w-0 pb-8">
+          <%= if @ui_state == :recipe_ready || @creation_mode == :manual do %>
+            <.recipe_form
+              form={@form}
+              action={@action}
+              recipe={@recipe}
+              tags_input={@tags_input}
+              uploads={@uploads}
+              unit_system={@current_user.unit_system}
+            />
+          <% else %>
+            <div class="min-h-[500px] rounded-2xl border-2 border-dashed border-base-300/50 flex flex-col items-center justify-center gap-4 p-10 text-center">
+              <div class="w-16 h-16 rounded-2xl bg-base-200 flex items-center justify-center">
+                <.icon name="hero-book-open" class="size-8 text-base-content/20" />
+              </div>
+              <div>
+                <p class="font-medium text-base-content/30">Your recipe will appear here</p>
+                <p class="text-sm text-base-content/20 mt-1">
+                  {if @creation_mode == :ai,
+                    do: "Describe a recipe in the chat to get started",
+                    else: "Switch to Manual tab to fill in details"}
+                </p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+      </div>
     <% end %>
     """
   end
 
-  # ── State 1: Creator Input ──
+  # ── State 1: Creator Input (mobile) ──
 
   defp creator_input(assigns) do
     ~H"""
@@ -573,7 +923,8 @@ defmodule CookbookWeb.RecipeFormLive do
               <%!-- URL mode toggle --%>
               <button
                 type="button"
-                phx-click="toggle_url_mode"
+                phx-click="set_ai_input_mode"
+                phx-value-mode={if @ai_input_mode == :url, do: "describe", else: "url"}
                 class={[
                   "btn btn-ghost btn-sm btn-circle",
                   @ai_input_mode == :url && "text-primary" || "text-base-content/50 hover:text-base-content"
@@ -622,14 +973,13 @@ defmodule CookbookWeb.RecipeFormLive do
     """
   end
 
-  # ── State 2: Loading ──
+  # ── State 2: Loading (mobile) ──
 
   defp loading_state(assigns) do
     ~H"""
     <div class="flex flex-col items-center justify-center min-h-[60vh]">
       <div class="w-full max-w-md mx-auto text-center">
         <div class="rounded-2xl border border-base-300/50 bg-base-200/60 backdrop-blur-sm p-10 space-y-5">
-          <%!-- Animated sparkles icon --%>
           <div class="flex justify-center">
             <div class="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center animate-pulse">
               <.icon name="hero-sparkles" class="size-8 text-primary" />
@@ -643,7 +993,7 @@ defmodule CookbookWeb.RecipeFormLive do
     """
   end
 
-  # ── State 3: Suggestion Picker ──
+  # ── State 3: Suggestion Picker (mobile) ──
 
   defp suggestion_picker(assigns) do
     ~H"""
@@ -695,7 +1045,7 @@ defmodule CookbookWeb.RecipeFormLive do
     """
   end
 
-  # ── State 4: Recipe Ready ──
+  # ── State 4: Recipe Ready (mobile) ──
 
   defp recipe_ready_state(assigns) do
     ~H"""
@@ -830,7 +1180,6 @@ defmodule CookbookWeb.RecipeFormLive do
           <.inputs_for :let={step_form} field={@form[:steps]}>
             <input type="hidden" name="recipe[steps_sort][]" value={step_form.index} />
             <div class="group rounded-xl border border-base-300/30 bg-base-100/30 p-4 space-y-3">
-              <%!-- Step header: number + delete --%>
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   <div class="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-content text-sm font-bold shrink-0">
@@ -852,14 +1201,12 @@ defmodule CookbookWeb.RecipeFormLive do
                   </span>
                 </label>
               </div>
-              <%!-- Instruction textarea (full width) --%>
               <.input
                 field={step_form[:instruction]}
                 type="textarea"
                 placeholder="Describe this step..."
                 class="w-full textarea min-h-[80px]"
               />
-              <%!-- Duration row --%>
               <div class="flex items-center gap-2">
                 <.icon name="hero-clock" class="size-4 text-base-content/40 shrink-0" />
                 <div class="w-20">
