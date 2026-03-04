@@ -56,16 +56,23 @@ defmodule CookbookWeb.RecipeListLive do
   def render(assigns) do
     ~H"""
     <div>
-      <.header>
-        Recipes
-        <:actions>
-          <.button navigate={~p"/recipes/new"} variant="primary">
-            <.icon name="hero-plus" class="size-4 mr-1" /> New Recipe
-          </.button>
-        </:actions>
-      </.header>
+      <%!-- Header row --%>
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-base-content">Recipes</h1>
+          <p class="text-sm text-base-content/50 mt-0.5">{length(@recipes)} recipe{if length(@recipes) != 1, do: "s", else: ""}</p>
+        </div>
+        <.link
+          navigate={~p"/recipes/new"}
+          class="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-content text-sm font-semibold hover:bg-primary/90 transition-colors"
+        >
+          <.icon name="hero-plus" class="size-4" />
+          New Recipe
+        </.link>
+      </div>
 
-      <div class="mt-6 flex flex-col sm:flex-row gap-3">
+      <%!-- Search + filter --%>
+      <div class="flex flex-col sm:flex-row gap-3 mb-6">
         <form phx-change="search" phx-submit="search" class="flex-1 relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none">
             <.icon name="hero-magnifying-glass" class="size-4" />
@@ -84,41 +91,62 @@ defmodule CookbookWeb.RecipeListLive do
         </form>
       </div>
 
+      <%!-- Empty state --%>
       <div :if={@recipes == []} class="mt-16 text-center">
         <div class="flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto mb-4">
           <.icon name="hero-book-open" class="size-8 text-primary" />
         </div>
         <p class="text-base-content/60 text-lg">No recipes yet</p>
         <p class="text-base-content/40 text-sm mt-1">Get started by adding your first recipe</p>
-        <.button navigate={~p"/recipes/new"} variant="primary" class="btn btn-primary mt-4">Add your first recipe</.button>
+        <.link navigate={~p"/recipes/new"} class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-content text-sm font-semibold hover:bg-primary/90 transition-colors mt-4">
+          <.icon name="hero-plus" class="size-4" />
+          Add your first recipe
+        </.link>
       </div>
 
-      <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <%!-- Recipe grid --%>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <.link
           :for={recipe <- @recipes}
           navigate={~p"/recipes/#{recipe.id}"}
-          class="rounded-xl border border-base-300/50 bg-base-200 overflow-hidden hover:border-primary/30 transition-all duration-300 group"
+          class="group rounded-2xl border border-base-300/50 bg-base-100 overflow-hidden hover:border-primary/30 hover:shadow-md transition-all duration-300"
         >
-          <div :if={recipe.image_url} class="aspect-video overflow-hidden bg-base-200">
-            <img src={recipe.image_url} alt={recipe.title} class="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          <%!-- Image --%>
+          <div class="aspect-video overflow-hidden bg-base-200">
+            <img
+              :if={recipe.image_url}
+              src={recipe.image_url}
+              alt={recipe.title}
+              class="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+            <div :if={!recipe.image_url} class="h-full w-full bg-gradient-to-br from-primary/5 to-secondary/5 flex items-center justify-center">
+              <.icon name="hero-book-open" class="size-10 text-primary/20" />
+            </div>
           </div>
-          <div :if={!recipe.image_url} class="aspect-video bg-gradient-to-br from-primary/5 to-secondary/5 flex items-center justify-center">
-            <.icon name="hero-book-open" class="size-10 text-primary/20" />
-          </div>
+
+          <%!-- Card body --%>
           <div class="p-4">
-            <h2 class="font-semibold text-base group-hover:text-primary transition-colors">
+            <h2 class="font-semibold text-base text-base-content group-hover:text-primary transition-colors leading-snug">
               {recipe.title}
             </h2>
+
+            <%!-- Meta row --%>
             <div class="flex items-center gap-3 mt-2">
-              <span :if={recipe.total_time_minutes} class="inline-flex items-center gap-1 text-sm text-base-content/50">
+              <span :if={recipe.total_time_minutes} class="inline-flex items-center gap-1 text-xs text-base-content/50">
                 <.icon name="hero-clock" class="size-3.5" />
                 {recipe.total_time_minutes} min
               </span>
+              <span :if={recipe.servings} class="inline-flex items-center gap-1 text-xs text-base-content/50">
+                <.icon name="hero-users" class="size-3.5" />
+                {recipe.servings} servings
+              </span>
             </div>
+
+            <%!-- Tags --%>
             <div :if={recipe.tags != []} class="flex flex-wrap gap-1.5 mt-3">
               <span
                 :for={tag <- recipe.tags}
-                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-primary/30 text-primary bg-primary/5"
+                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border border-primary/20 text-primary/80 bg-primary/5"
               >
                 {tag}
               </span>
@@ -127,6 +155,15 @@ defmodule CookbookWeb.RecipeListLive do
         </.link>
       </div>
     </div>
+
+    <%!-- Mobile FAB --%>
+    <.link
+      navigate={~p"/recipes/new"}
+      class="fixed bottom-6 right-6 z-30 sm:hidden flex items-center justify-center w-14 h-14 rounded-full bg-primary text-primary-content shadow-lg hover:bg-primary/90 transition-colors"
+      aria-label="Add recipe"
+    >
+      <.icon name="hero-plus" class="size-6" />
+    </.link>
     """
   end
 end
