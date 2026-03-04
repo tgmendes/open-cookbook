@@ -1,0 +1,12 @@
+{
+  "name": "Open Cookbook",
+  "short_name": "Cookbook",
+  "description": "Your personal recipe collection",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#f97316",
+  "icons": [
+    { "src": "/images/logo.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -132,7 +132,7 @@ defmodule CookbookWeb.CookModeLive do
     assigns = assign(assigns, :step_ingredients, matched_ingredients(assigns.step, ingredients))
 
     ~H"""
-    <div class="fixed inset-0 z-50 bg-base-100 flex flex-col" phx-window-keydown="keydown">
+    <div id="cook-mode" phx-hook="ScreenWakeLock" class="fixed inset-0 z-50 bg-base-100 flex flex-col" phx-window-keydown="keydown">
       <%!-- Top bar --%>
       <div class="flex items-center justify-between px-4 py-3 border-b border-base-300/50 bg-base-200/80 backdrop-blur-sm">
         <.link

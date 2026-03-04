@@ -25,6 +25,24 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/cookbook"
 import topbar from "../vendor/topbar"
 
+const ScreenWakeLock = {
+  async mounted() {
+    if (!navigator.wakeLock) return
+    try {
+      this.lock = await navigator.wakeLock.request("screen")
+      document.addEventListener("visibilitychange", this._reacquire = async () => {
+        if (document.visibilityState === "visible") {
+          try { this.lock = await navigator.wakeLock.request("screen") } catch {}
+        }
+      })
+    } catch {}
+  },
+  destroyed() {
+    this.lock?.release()
+    document.removeEventListener("visibilitychange", this._reacquire)
+  }
+}
+
 const ScrollToBottom = {
   mounted() {
     this.scrollToBottom()
@@ -46,7 +64,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, ScrollToBottom},
+  hooks: {...colocatedHooks, ScrollToBottom, ScreenWakeLock},
 })
 
 window.addEventListener("phx:trigger-file-input", (e) => {
