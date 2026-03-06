@@ -117,6 +117,16 @@ defmodule CookbookWeb.Layouts do
             <.icon name="hero-scale" class="size-4 shrink-0" />
             <span class="capitalize">{assigns[:current_user] && assigns[:current_user].unit_system || "metric"}</span>
           </button>
+          <button
+            phx-click={JS.dispatch("toggle-theme")}
+            class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-base-content/50 hover:text-base-content hover:bg-base-300/50 transition-all duration-200"
+            title="Toggle light/dark mode"
+          >
+            <.icon name="hero-sun" class="size-4 shrink-0 dark:hidden" />
+            <.icon name="hero-moon" class="size-4 shrink-0 hidden dark:block" />
+            <span class="dark:hidden">Light mode</span>
+            <span class="hidden dark:block">Dark mode</span>
+          </button>
           <a
             href="/auth/logout"
             class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-base-content/50 hover:text-base-content hover:bg-base-300/50 transition-all duration-200"
@@ -203,6 +213,14 @@ defmodule CookbookWeb.Layouts do
           <.icon name="hero-shopping-cart" class="size-5" />
           <span>Shopping</span>
         </.link>
+        <button
+          phx-click={JS.dispatch("toggle-theme")}
+          class="flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium text-base-content/40 hover:text-base-content/70 transition-colors"
+        >
+          <.icon name="hero-sun" class="size-5 dark:hidden" />
+          <.icon name="hero-moon" class="size-5 hidden dark:block" />
+          <span>Theme</span>
+        </button>
       </div>
     </nav>
     """

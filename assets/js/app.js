@@ -67,6 +67,14 @@ const liveSocket = new LiveSocket("/live", Socket, {
   hooks: {...colocatedHooks, ScrollToBottom, ScreenWakeLock},
 })
 
+// Theme toggle — dispatched by the sun/moon button in the sidebar
+document.addEventListener("toggle-theme", () => {
+  const html = document.documentElement
+  const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark"
+  html.setAttribute("data-theme", next)
+  localStorage.setItem("cookbook-theme", next)
+})
+
 window.addEventListener("phx:trigger-file-input", (e) => {
   const input = document.getElementById(e.detail.id)
   if (input) input.click()
