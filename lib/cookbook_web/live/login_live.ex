@@ -47,34 +47,38 @@ defmodule CookbookWeb.LoginLive do
 
   def render(assigns) do
     ~H"""
-    <div class="mx-auto max-w-sm mt-20">
-      <div class="text-center mb-8">
-        <div class="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-primary-content mx-auto mb-4">
-          <.icon name="hero-book-open-solid" class="size-8" />
+    <div class="min-h-[80vh] flex flex-col items-center justify-center">
+      <div class="w-full max-w-sm">
+        <%!-- Teal brand header --%>
+        <div class="text-center mb-8">
+          <div class="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-content mx-auto mb-5 shadow-lg">
+            <.icon name="hero-book-open-solid" class="size-9" />
+          </div>
+          <h1 class="text-3xl font-bold tracking-tight">Open Cookbook</h1>
+          <p class="text-base-content/60 mt-2">Your personal recipe collection</p>
         </div>
-        <h1 class="text-2xl font-bold">Log in to Cookbook</h1>
-        <p class="text-base-content/60 mt-1">Enter your email to receive a magic link</p>
-      </div>
 
-      <div :if={!@sent} class="rounded-xl border border-base-200 bg-base-200 p-6">
-        <.form for={@form} id="login_form" phx-submit="send_magic_link" class="space-y-4">
-          <.input field={@form[:email]} type="email" label="Email" required />
-          <.button type="submit" phx-disable-with="Sending..." class="btn btn-primary w-full">
-            <.icon name="hero-paper-airplane" class="size-4 mr-1" />
-            Send magic link
-          </.button>
-        </.form>
-      </div>
-
-      <div :if={@sent} class="rounded-xl border border-base-200 bg-base-200 p-6 text-center">
-        <div class="flex items-center justify-center w-12 h-12 rounded-full bg-success/10 mx-auto mb-3">
-          <.icon name="hero-check-circle-solid" class="size-7 text-success" />
+        <div :if={!@sent} class="rounded-2xl border border-base-300 bg-base-200 p-7 shadow-sm">
+          <p class="text-sm font-medium text-base-content/70 mb-5">Enter your email to receive a magic link</p>
+          <.form for={@form} id="login_form" phx-submit="send_magic_link" class="space-y-4">
+            <.input field={@form[:email]} type="email" label="Email" required />
+            <.button type="submit" phx-disable-with="Sending..." class="btn btn-primary w-full">
+              <.icon name="hero-paper-airplane" class="size-4 mr-1" />
+              Send magic link
+            </.button>
+          </.form>
         </div>
-        <p class="font-medium">Check your inbox</p>
-        <p class="text-base-content/60 text-sm mt-2">
-          If this email is authorized, a magic link has been sent.
-          Check your inbox or <a href="/dev/mailbox" class="text-primary hover:underline">dev mailbox</a> in development.
-        </p>
+
+        <div :if={@sent} class="rounded-2xl border border-base-300 bg-base-200 p-7 text-center shadow-sm">
+          <div class="flex items-center justify-center w-12 h-12 rounded-full bg-success/10 mx-auto mb-3">
+            <.icon name="hero-check-circle-solid" class="size-7 text-success" />
+          </div>
+          <p class="font-semibold text-lg">Check your inbox</p>
+          <p class="text-base-content/60 text-sm mt-2">
+            If this email is authorized, a magic link has been sent.
+            Check your inbox or <a href="/dev/mailbox" class="text-primary hover:underline">dev mailbox</a> in development.
+          </p>
+        </div>
       </div>
     </div>
     """

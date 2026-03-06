@@ -22,6 +22,9 @@ defmodule CookbookWeb.Layouts do
       "/planner/shopping" ->
         current == "/planner/shopping"
 
+      "/" ->
+        current == "/"
+
       _ ->
         false
     end
@@ -119,90 +122,9 @@ defmodule CookbookWeb.Layouts do
         </div>
       </aside>
 
-      <%!-- Mobile top bar --%>
-      <header
-        :if={assigns[:current_user]}
-        class="lg:hidden bg-base-100/80 backdrop-blur-md border-b border-base-300/50 sticky top-0 z-40"
-      >
-        <div class="flex items-center justify-between h-14 px-4">
-          <a href="/" class="flex items-center gap-2">
-            <span class="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-secondary text-primary-content shadow-sm">
-              <.icon name="hero-book-open-solid" class="size-3.5" />
-            </span>
-            <span class="font-bold text-sm bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              Open Cookbook
-            </span>
-          </a>
-          <button
-            class="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-base-300/50 transition-colors"
-            phx-click={toggle_mobile_nav()}
-            aria-label="Toggle menu"
-          >
-            <.icon name="hero-bars-3" class="size-5" />
-          </button>
-        </div>
-      </header>
-
-      <%!-- Mobile nav drawer --%>
-      <div
-        :if={assigns[:current_user]}
-        id="mobile-nav"
-        class="lg:hidden hidden border-b border-base-300/50 bg-base-100/95 backdrop-blur-md sticky top-14 z-30"
-      >
-        <nav class="px-4 py-3 flex flex-col gap-0.5">
-          <.link
-            navigate="/recipes"
-            class={[
-              "flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all",
-              nav_active?(assigns, "/recipes") &&
-                "bg-primary/10 text-primary" ||
-                "text-base-content/60 hover:text-base-content hover:bg-base-300/50"
-            ]}
-          >
-            <.icon name="hero-book-open" class="size-4" /> Recipes
-          </.link>
-          <.link
-            navigate="/planner"
-            class={[
-              "flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all",
-              nav_active?(assigns, "/planner") &&
-                "bg-primary/10 text-primary" ||
-                "text-base-content/60 hover:text-base-content hover:bg-base-300/50"
-            ]}
-          >
-            <.icon name="hero-calendar-days" class="size-4" /> Meal Plan
-          </.link>
-          <.link
-            navigate="/planner/shopping"
-            class={[
-              "flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all",
-              nav_active?(assigns, "/planner/shopping") &&
-                "bg-primary/10 text-primary" ||
-                "text-base-content/60 hover:text-base-content hover:bg-base-300/50"
-            ]}
-          >
-            <.icon name="hero-shopping-cart" class="size-4" /> Shopping List
-          </.link>
-          <div class="h-px bg-base-content/10 my-1"></div>
-          <button
-            phx-click="toggle_unit_system"
-            class="w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-base-content/50 hover:text-base-content hover:bg-base-300/50 transition-all"
-          >
-            <.icon name="hero-scale" class="size-4" />
-            Units: <span class="capitalize ml-1">{assigns[:current_user] && assigns[:current_user].unit_system || "metric"}</span>
-          </button>
-          <a
-            href="/auth/logout"
-            class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-base-content/50 hover:text-base-content hover:bg-base-300/50 transition-all"
-          >
-            <.icon name="hero-arrow-right-on-rectangle" class="size-4" /> Log out
-          </a>
-        </nav>
-      </div>
-
       <%!-- Main content with sidebar offset on desktop --%>
       <div class={[assigns[:current_user] && "lg:pl-56"]}>
-        <main class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-20 lg:pb-8">
           <div class="mx-auto max-w-5xl">
             {@inner_content}
           </div>
@@ -211,16 +133,56 @@ defmodule CookbookWeb.Layouts do
     </div>
 
     <.flash_group flash={@flash} />
-    """
-  end
 
-  defp toggle_mobile_nav(js \\ %JS{}) do
-    js
-    |> JS.toggle(
-      to: "#mobile-nav",
-      in: {"transition-all duration-200 ease-out", "opacity-0 -translate-y-2", "opacity-100 translate-y-0"},
-      out: {"transition-all duration-150 ease-in", "opacity-100 translate-y-0", "opacity-0 -translate-y-2"}
-    )
+    <%!-- Mobile bottom nav --%>
+    <nav
+      :if={assigns[:current_user]}
+      class="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-base-100 border-t border-base-300/50"
+    >
+      <div class="flex items-stretch h-16 pb-[env(safe-area-inset-bottom)]">
+        <.link
+          navigate="/"
+          class={[
+            "flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium transition-colors",
+            nav_active?(assigns, "/") && "text-primary" || "text-base-content/40 hover:text-base-content/70"
+          ]}
+        >
+          <.icon name="hero-home" class="size-5" />
+          <span>Home</span>
+        </.link>
+        <.link
+          navigate="/recipes"
+          class={[
+            "flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium transition-colors",
+            nav_active?(assigns, "/recipes") && "text-primary" || "text-base-content/40 hover:text-base-content/70"
+          ]}
+        >
+          <.icon name="hero-book-open" class="size-5" />
+          <span>Recipes</span>
+        </.link>
+        <.link
+          navigate="/planner"
+          class={[
+            "flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium transition-colors",
+            nav_active?(assigns, "/planner") && "text-primary" || "text-base-content/40 hover:text-base-content/70"
+          ]}
+        >
+          <.icon name="hero-calendar-days" class="size-5" />
+          <span>Planner</span>
+        </.link>
+        <.link
+          navigate="/planner/shopping"
+          class={[
+            "flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium transition-colors",
+            nav_active?(assigns, "/planner/shopping") && "text-primary" || "text-base-content/40 hover:text-base-content/70"
+          ]}
+        >
+          <.icon name="hero-shopping-cart" class="size-5" />
+          <span>Shopping</span>
+        </.link>
+      </div>
+    </nav>
+    """
   end
 
   attr :flash, :map, required: true, doc: "the map of flash messages"
