@@ -662,7 +662,7 @@ defmodule CookbookWeb.RecipeFormLive do
           </div>
 
           <%!-- RIGHT: AI chat panel (fixed width, full height, flex column) --%>
-          <div class="w-[22rem] shrink-0 border-l border-base-300/50 flex flex-col min-h-0">
+          <div class="w-[30rem] shrink-0 border-l border-base-300/50 flex flex-col min-h-0">
 
             <%!-- AI header --%>
             <div class="flex items-center gap-3 px-4 py-3.5 border-b border-base-300/50 shrink-0">
