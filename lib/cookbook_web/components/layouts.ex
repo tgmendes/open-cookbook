@@ -12,7 +12,7 @@ defmodule CookbookWeb.Layouts do
 
     case path do
       "/recipes" ->
-        current == "/" || current == "/recipes" ||
+        current == "/recipes" ||
           String.starts_with?(current, "/recipes/")
 
       "/planner" ->
@@ -58,6 +58,18 @@ defmodule CookbookWeb.Layouts do
         </div>
 
         <nav class="flex-1 px-3 pb-3 space-y-0.5 overflow-y-auto">
+          <.link
+            navigate="/"
+            class={[
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+              nav_active?(assigns, "/") &&
+                "bg-primary/10 text-primary" ||
+                "text-base-content/60 hover:text-base-content hover:bg-base-300/50"
+            ]}
+          >
+            <.icon name="hero-squares-2x2" class="size-4 shrink-0" />
+            Dashboard
+          </.link>
           <.link
             navigate="/recipes"
             class={[
@@ -120,12 +132,23 @@ defmodule CookbookWeb.Layouts do
             New Recipe
           </.link>
         </div>
+
+        <%!-- User avatar --%>
+        <div :if={assigns[:current_user]} class="px-4 py-4 border-t border-base-300/50 flex items-center gap-3">
+          <div class="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-content text-sm font-bold shrink-0">
+            {String.first(assigns[:current_user].email) |> String.upcase()}
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-base-content truncate">Chef</p>
+            <p class="text-xs text-base-content/50 truncate">{assigns[:current_user].email}</p>
+          </div>
+        </div>
       </aside>
 
       <%!-- Main content with sidebar offset on desktop --%>
       <div class={[assigns[:current_user] && "lg:pl-56"]}>
-        <main class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-20 lg:pb-8">
-          <div class="mx-auto max-w-5xl">
+        <main class={["px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-20 lg:pb-8", assigns[:page_full_width] && "!p-0"]}>
+          <div class={["mx-auto", !assigns[:page_full_width] && "max-w-5xl"]}>
             {@inner_content}
           </div>
         </main>

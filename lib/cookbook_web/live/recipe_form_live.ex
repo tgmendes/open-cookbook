@@ -81,7 +81,7 @@ defmodule CookbookWeb.RecipeFormLive do
       "screenshot" -> :screenshot
       _ -> :describe
     end
-    {:noreply, assign(socket, ai_input_mode: mode_atom, ai_error: nil)}
+    {:noreply, assign(socket, ai_input_mode: mode_atom, creation_mode: :ai, ai_error: nil)}
   end
 
   def handle_event("set_creation_mode", %{"mode" => mode}, socket) do
@@ -562,143 +562,339 @@ defmodule CookbookWeb.RecipeFormLive do
         <% end %>
       </div>
 
-      <%!-- Desktop: two-column chat layout (hidden below lg) --%>
-      <div class="hidden lg:flex gap-6 items-start">
+      <%!-- Desktop: two-column layout — form LEFT, AI chat RIGHT --%>
+      <div class="hidden lg:block">
 
-        <%!-- Left: Chat / Manual panel --%>
-        <div class="w-96 shrink-0 flex flex-col rounded-2xl border border-base-300/50 bg-base-100 overflow-hidden sticky top-8 max-h-[calc(100vh-6rem)]">
+        <%!-- Page header: Back + title + mode tabs + save button --%>
+        <div class="flex items-center gap-4 mb-6 pb-4 border-b border-base-300/50">
+          <div class="flex items-center gap-3 min-w-0">
+            <.link navigate={~p"/recipes"} class="flex items-center gap-1 text-sm text-base-content/50 hover:text-base-content transition-colors shrink-0">
+              <.icon name="hero-arrow-left" class="size-4" />
+              Back
+            </.link>
+            <span class="text-base-content/30">|</span>
+            <h1 class="text-lg font-bold text-base-content truncate">New Recipe</h1>
+          </div>
 
-          <%!-- Mode tabs: Manual | AI Assist --%>
-          <div class="flex border-b border-base-300/50 bg-base-200/50 shrink-0">
+          <%!-- Mode tabs --%>
+          <div class="flex items-center gap-1 flex-1 justify-center">
             <button
               phx-click="set_creation_mode"
               phx-value-mode="manual"
               class={[
-                "flex-1 py-3 text-sm font-medium transition-colors border-b-2",
+                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
                 if(@creation_mode == :manual,
-                  do: "border-primary text-primary bg-base-100",
-                  else: "border-transparent text-base-content/50 hover:text-base-content"
+                  do: "bg-primary text-primary-content",
+                  else: "text-base-content/60 hover:text-base-content hover:bg-base-200"
                 )
               ]}
             >
               Manual
             </button>
             <button
-              phx-click="set_creation_mode"
+              phx-click="set_creation_mode_and_url"
               phx-value-mode="ai"
+              :if={false}
+            >
+            </button>
+            <button
+              phx-click="set_ai_input_mode"
+              phx-value-mode="url"
               class={[
-                "flex-1 py-3 text-sm font-medium transition-colors border-b-2",
-                if(@creation_mode == :ai,
-                  do: "border-primary text-primary bg-base-100",
-                  else: "border-transparent text-base-content/50 hover:text-base-content"
+                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                if(@creation_mode == :ai && @ai_input_mode == :url,
+                  do: "bg-primary text-primary-content",
+                  else: "text-base-content/60 hover:text-base-content hover:bg-base-200"
                 )
               ]}
             >
-              AI Assist
+              Import URL
+            </button>
+            <button
+              phx-click="set_ai_input_mode"
+              phx-value-mode="describe"
+              class={[
+                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                if(@creation_mode == :ai && @ai_input_mode == :describe,
+                  do: "bg-primary text-primary-content",
+                  else: "text-base-content/60 hover:text-base-content hover:bg-base-200"
+                )
+              ]}
+            >
+              Describe with AI
             </button>
           </div>
 
-          <%= if @creation_mode == :ai do %>
-            <%!-- AI input sub-tabs: Chat | Link | Screenshot --%>
-            <div class="flex border-b border-base-300/30 bg-base-200/30 px-3 shrink-0">
+          <%!-- Save Recipe button (only visible when form is ready) --%>
+          <div class="shrink-0">
+            <%= if @ui_state == :recipe_ready || @creation_mode == :manual do %>
               <button
-                phx-click="set_ai_input_mode"
-                phx-value-mode="describe"
-                class={[
-                  "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
-                  if(@ai_input_mode == :describe,
-                    do: "border-primary text-primary",
-                    else: "border-transparent text-base-content/40 hover:text-base-content/70"
-                  )
-                ]}
+                form="recipe-form-desktop"
+                type="submit"
+                class="px-5 py-2 rounded-xl bg-primary text-primary-content text-sm font-semibold hover:bg-primary/90 transition-colors"
               >
-                Chat
+                Save Recipe
               </button>
-              <button
-                phx-click="set_ai_input_mode"
-                phx-value-mode="url"
-                class={[
-                  "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
-                  if(@ai_input_mode == :url,
-                    do: "border-primary text-primary",
-                    else: "border-transparent text-base-content/40 hover:text-base-content/70"
-                  )
-                ]}
-              >
-                Link
-              </button>
-              <button
-                phx-click="set_ai_input_mode"
-                phx-value-mode="screenshot"
-                class={[
-                  "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
-                  if(@ai_input_mode == :screenshot,
-                    do: "border-primary text-primary",
-                    else: "border-transparent text-base-content/40 hover:text-base-content/70"
-                  )
-                ]}
-              >
-                Screenshot
-              </button>
-            </div>
+            <% end %>
+          </div>
+        </div>
 
-            <%!-- Chat messages area --%>
-            <div
-              id="desktop-chat-messages"
-              class="flex-1 overflow-y-auto p-4 space-y-3"
-              phx-hook="ScrollToBottom"
-            >
-              <%!-- Message bubbles --%>
-              <div
-                :for={msg <- @messages}
-                class={["flex gap-2", if(msg.role == :user, do: "justify-end", else: "")]}
-              >
-                <div
-                  :if={msg.role == :assistant}
-                  class="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
-                >
-                  <.icon name="hero-sparkles" class="size-3.5 text-primary" />
+        <%!-- Two-column body --%>
+        <div class="flex gap-6 items-start">
+
+          <%!-- LEFT: Recipe form --%>
+          <div class="flex-1 min-w-0 pb-8">
+            <%= if @ui_state == :recipe_ready || @creation_mode == :manual do %>
+              <.recipe_form
+                form={@form}
+                action={@action}
+                recipe={@recipe}
+                tags_input={@tags_input}
+                uploads={@uploads}
+                unit_system={@current_user.unit_system}
+                form_id="recipe-form-desktop"
+              />
+            <% else %>
+              <div class="min-h-[500px] rounded-2xl border-2 border-dashed border-base-300/50 flex flex-col items-center justify-center gap-4 p-10 text-center">
+                <div class="w-16 h-16 rounded-2xl bg-base-200 flex items-center justify-center">
+                  <.icon name="hero-book-open" class="size-8 text-base-content/20" />
                 </div>
-                <div class={[
-                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                  if(msg.role == :user,
-                    do: "bg-primary text-primary-content rounded-tr-sm",
-                    else: "bg-base-200 text-base-content rounded-tl-sm"
-                  )
-                ]}>
-                  {msg.content}
+                <div>
+                  <p class="font-medium text-base-content/30">Your recipe will appear here</p>
+                  <p class="text-sm text-base-content/20 mt-1">Describe a recipe in the chat to get started</p>
                 </div>
               </div>
+            <% end %>
+          </div>
 
-              <%!-- Suggestion cards (when picking) --%>
-              <div :if={@ui_state == :picking_suggestion} class="space-y-2 mt-2">
+          <%!-- RIGHT: AI chat panel --%>
+          <div class="w-80 shrink-0 flex flex-col rounded-2xl border border-base-300/50 bg-base-100 overflow-hidden sticky top-8 max-h-[calc(100vh-6rem)]">
+
+            <%!-- AI panel header --%>
+            <div class="flex items-center gap-3 px-4 py-3 border-b border-base-300/50 shrink-0">
+              <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
+                <.icon name="hero-sparkles" class="size-4 text-primary" />
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-base-content">AI Recipe Assistant</p>
+                <p class="text-xs text-primary">Ready to help</p>
+              </div>
+            </div>
+
+            <%= if @creation_mode == :ai do %>
+              <%!-- AI input sub-tabs: Chat | Link | Screenshot --%>
+              <div class="flex border-b border-base-300/30 bg-base-200/30 px-3 shrink-0">
                 <button
-                  :for={{suggestion, index} <- Enum.with_index(@ai_suggestions)}
-                  phx-click="pick_suggestion"
-                  phx-value-index={index}
-                  class="w-full text-left rounded-xl border border-base-300/50 bg-base-200/60 hover:bg-base-200 hover:border-primary/30 p-3 transition-all group"
+                  phx-click="set_ai_input_mode"
+                  phx-value-mode="describe"
+                  class={[
+                    "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                    if(@ai_input_mode == :describe,
+                      do: "border-primary text-primary",
+                      else: "border-transparent text-base-content/40 hover:text-base-content/70"
+                    )
+                  ]}
                 >
-                  <div class="font-medium text-sm group-hover:text-primary transition-colors">
-                    {suggestion["title"]}
-                  </div>
-                  <div class="text-xs text-base-content/50 mt-0.5 line-clamp-2">
-                    {suggestion["description"]}
-                  </div>
+                  Chat
+                </button>
+                <button
+                  phx-click="set_ai_input_mode"
+                  phx-value-mode="url"
+                  class={[
+                    "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                    if(@ai_input_mode == :url,
+                      do: "border-primary text-primary",
+                      else: "border-transparent text-base-content/40 hover:text-base-content/70"
+                    )
+                  ]}
+                >
+                  Link
+                </button>
+                <button
+                  phx-click="set_ai_input_mode"
+                  phx-value-mode="screenshot"
+                  class={[
+                    "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                    if(@ai_input_mode == :screenshot,
+                      do: "border-primary text-primary",
+                      else: "border-transparent text-base-content/40 hover:text-base-content/70"
+                    )
+                  ]}
+                >
+                  Screenshot
                 </button>
               </div>
 
-              <%!-- Loading indicator --%>
-              <div :if={@ui_state == :loading} class="flex items-center gap-2 pl-9">
-                <div class="bg-base-200 rounded-2xl rounded-tl-sm px-3.5 py-2.5">
-                  <span class="loading loading-dots loading-xs text-primary"></span>
+              <%!-- Chat messages area --%>
+              <div
+                id="desktop-chat-messages"
+                class="flex-1 overflow-y-auto p-4 space-y-3"
+                phx-hook="ScrollToBottom"
+              >
+                <div
+                  :for={msg <- @messages}
+                  class={["flex gap-2", if(msg.role == :user, do: "justify-end", else: "")]}
+                >
+                  <div
+                    :if={msg.role == :assistant}
+                    class="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
+                  >
+                    <.icon name="hero-sparkles" class="size-3.5 text-primary" />
+                  </div>
+                  <div class={[
+                    "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+                    if(msg.role == :user,
+                      do: "bg-primary text-primary-content rounded-tr-sm",
+                      else: "bg-base-200 text-base-content rounded-tl-sm"
+                    )
+                  ]}>
+                    {msg.content}
+                  </div>
+                </div>
+
+                <%!-- Suggestion cards --%>
+                <div :if={@ui_state == :picking_suggestion} class="space-y-2 mt-2">
+                  <button
+                    :for={{suggestion, index} <- Enum.with_index(@ai_suggestions)}
+                    phx-click="pick_suggestion"
+                    phx-value-index={index}
+                    class="w-full text-left rounded-xl border border-base-300/50 bg-base-200/60 hover:bg-base-200 hover:border-primary/30 p-3 transition-all group"
+                  >
+                    <div class="font-medium text-sm group-hover:text-primary transition-colors">
+                      {suggestion["title"]}
+                    </div>
+                    <div class="text-xs text-base-content/50 mt-0.5 line-clamp-2">
+                      {suggestion["description"]}
+                    </div>
+                  </button>
+                </div>
+
+                <%!-- Loading indicator --%>
+                <div :if={@ui_state == :loading} class="flex items-center gap-2 pl-9">
+                  <div class="bg-base-200 rounded-2xl rounded-tl-sm px-3.5 py-2.5">
+                    <span class="loading loading-dots loading-xs text-primary"></span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <%!-- Input area --%>
-            <div class="border-t border-base-300/50 p-3 shrink-0">
-              <%= if @ui_state == :recipe_ready do %>
-                <%!-- Refine bar --%>
+              <%!-- Input area --%>
+              <div class="border-t border-base-300/50 p-3 shrink-0">
+                <%= if @ui_state == :recipe_ready do %>
+                  <form phx-submit="ai_refine" class="flex gap-2">
+                    <div class="flex-1 relative">
+                      <div :if={@ai_loading} class="absolute right-2 top-1/2 -translate-y-1/2">
+                        <span class="loading loading-spinner loading-xs text-primary"></span>
+                      </div>
+                      <input
+                        type="text"
+                        name="refine_input"
+                        placeholder="Ask anything about this recipe..."
+                        class="w-full input input-sm pr-8"
+                        disabled={@ai_loading}
+                        autocomplete="off"
+                      />
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm" disabled={@ai_loading}>
+                      <.icon name="hero-paper-airplane" class="size-4" />
+                    </button>
+                  </form>
+                <% else %>
+                  <%= if @ui_state == :picking_suggestion do %>
+                    <button
+                      phx-click="back_to_input"
+                      class="w-full text-center text-sm text-base-content/40 hover:text-base-content transition-colors py-1"
+                    >
+                      None of these — try a different description
+                    </button>
+                  <% else %>
+                    <%= if @ui_state != :loading do %>
+                      <form
+                        id="creator-form-desktop"
+                        phx-submit="ai_submit"
+                        phx-change="validate-upload"
+                        class="space-y-2"
+                      >
+                        <div :if={@ai_error} class="flex items-center gap-1.5 text-xs text-error">
+                          <.icon name="hero-exclamation-circle" class="size-3.5 shrink-0" />
+                          {@ai_error}
+                        </div>
+
+                        <div
+                          :for={entry <- @uploads.recipe_image.entries}
+                          class="flex items-center gap-2 p-2 bg-base-200 rounded-lg"
+                        >
+                          <.live_img_preview entry={entry} class="w-10 h-10 object-cover rounded-md" />
+                          <span class="text-xs flex-1 truncate text-base-content/70">{entry.client_name}</span>
+                          <button
+                            type="button"
+                            phx-click="cancel-upload"
+                            phx-value-ref={entry.ref}
+                            class="text-base-content/30 hover:text-error transition-colors"
+                          >
+                            <.icon name="hero-x-mark" class="size-4" />
+                          </button>
+                        </div>
+
+                        <%= if @ai_input_mode == :screenshot do %>
+                          <label class="flex flex-col items-center justify-center w-full h-24 rounded-xl border-2 border-dashed border-base-300/50 hover:border-primary/40 cursor-pointer transition-colors bg-base-200/40 hover:bg-base-200/60">
+                            <.icon name="hero-photo" class="size-6 text-base-content/30 mb-1" />
+                            <span class="text-xs text-base-content/40">Click to upload a recipe photo</span>
+                            <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload-desktop" />
+                          </label>
+                          <button
+                            type="submit"
+                            class="w-full btn btn-primary btn-sm gap-1.5"
+                            disabled={@uploads.recipe_image.entries == []}
+                          >
+                            <.icon name="hero-sparkles" class="size-4" />
+                            Extract Recipe
+                          </button>
+                        <% else %>
+                          <div class="flex gap-2 items-end">
+                            <textarea
+                              name="ai_input"
+                              phx-keyup="ai_validate"
+                              rows="2"
+                              placeholder={if @ai_input_mode == :url, do: "Paste a recipe URL...", else: "Describe what you'd like to cook..."}
+                              class="flex-1 textarea textarea-bordered textarea-sm resize-none text-sm"
+                              autocomplete="off"
+                            >{@ai_input_text}</textarea>
+                            <button type="submit" class="btn btn-primary btn-sm h-auto py-2.5 px-3">
+                              <.icon name="hero-sparkles" class="size-4" />
+                            </button>
+                          </div>
+                          <div class="hidden">
+                            <.live_file_input upload={@uploads.recipe_image} id="recipe-image-upload-desktop-hidden" />
+                          </div>
+                        <% end %>
+                      </form>
+
+                      <div :if={@ai_input_mode == :describe} class="flex flex-wrap gap-1.5 mt-2">
+                        <button
+                          :for={suggestion <- suggestions()}
+                          type="button"
+                          phx-click="use_suggestion"
+                          phx-value-text={suggestion}
+                          class="px-2.5 py-1 rounded-full text-xs border border-base-300/50 bg-base-200/40 text-base-content/60 hover:bg-base-200 hover:text-base-content transition-all"
+                        >
+                          {suggestion}
+                        </button>
+                      </div>
+                    <% end %>
+                  <% end %>
+                <% end %>
+              </div>
+
+            <% else %>
+              <%!-- Manual mode: AI assistant ready --%>
+              <div class="flex-1 flex items-center justify-center p-6 text-center">
+                <div>
+                  <p class="text-sm text-base-content/50">Switch to <strong class="text-primary">Describe with AI</strong> or <strong class="text-primary">Import URL</strong> to use the AI assistant.</p>
+                </div>
+              </div>
+
+              <%!-- Refine input (always available in recipe_ready state) --%>
+              <div :if={@ui_state == :recipe_ready} class="border-t border-base-300/50 p-3 shrink-0">
                 <form phx-submit="ai_refine" class="flex gap-2">
                   <div class="flex-1 relative">
                     <div :if={@ai_loading} class="absolute right-2 top-1/2 -translate-y-1/2">
@@ -707,7 +903,7 @@ defmodule CookbookWeb.RecipeFormLive do
                     <input
                       type="text"
                       name="refine_input"
-                      placeholder="Ask AI to refine — e.g. &quot;make it spicier&quot;..."
+                      placeholder="Ask anything about this recipe..."
                       class="w-full input input-sm pr-8"
                       disabled={@ai_loading}
                       autocomplete="off"
@@ -717,140 +913,11 @@ defmodule CookbookWeb.RecipeFormLive do
                     <.icon name="hero-paper-airplane" class="size-4" />
                   </button>
                 </form>
-              <% else %>
-                <%= if @ui_state == :picking_suggestion do %>
-                  <%!-- Back button --%>
-                  <button
-                    phx-click="back_to_input"
-                    class="w-full text-center text-sm text-base-content/40 hover:text-base-content transition-colors py-1"
-                  >
-                    None of these — try a different description
-                  </button>
-                <% else %>
-                <%= if @ui_state != :loading do %>
-                <%!-- Main AI input --%>
-                <form
-                  id="creator-form-desktop"
-                  phx-submit="ai_submit"
-                  phx-change="validate-upload"
-                  class="space-y-2"
-                >
-                  <%!-- Error --%>
-                  <div :if={@ai_error} class="flex items-center gap-1.5 text-xs text-error">
-                    <.icon name="hero-exclamation-circle" class="size-3.5 shrink-0" />
-                    {@ai_error}
-                  </div>
-
-                  <%!-- Upload preview --%>
-                  <div
-                    :for={entry <- @uploads.recipe_image.entries}
-                    class="flex items-center gap-2 p-2 bg-base-200 rounded-lg"
-                  >
-                    <.live_img_preview entry={entry} class="w-10 h-10 object-cover rounded-md" />
-                    <span class="text-xs flex-1 truncate text-base-content/70">{entry.client_name}</span>
-                    <button
-                      type="button"
-                      phx-click="cancel-upload"
-                      phx-value-ref={entry.ref}
-                      class="text-base-content/30 hover:text-error transition-colors"
-                    >
-                      <.icon name="hero-x-mark" class="size-4" />
-                    </button>
-                  </div>
-
-                  <%= if @ai_input_mode == :screenshot do %>
-                    <%!-- Screenshot upload zone --%>
-                    <label class="flex flex-col items-center justify-center w-full h-24 rounded-xl border-2 border-dashed border-base-300/50 hover:border-primary/40 cursor-pointer transition-colors bg-base-200/40 hover:bg-base-200/60">
-                      <.icon name="hero-photo" class="size-6 text-base-content/30 mb-1" />
-                      <span class="text-xs text-base-content/40">Click to upload a recipe photo</span>
-                      <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload-desktop" />
-                    </label>
-                    <button
-                      type="submit"
-                      class="w-full btn btn-primary btn-sm gap-1.5"
-                      disabled={@uploads.recipe_image.entries == []}
-                    >
-                      <.icon name="hero-sparkles" class="size-4" />
-                      Extract Recipe
-                    </button>
-                  <% else %>
-                    <%!-- Chat / Link textarea --%>
-                    <div class="flex gap-2 items-end">
-                      <textarea
-                        name="ai_input"
-                        phx-keyup="ai_validate"
-                        rows="2"
-                        placeholder={if @ai_input_mode == :url, do: "Paste a recipe URL...", else: "Describe what you'd like to cook..."}
-                        class="flex-1 textarea textarea-bordered textarea-sm resize-none text-sm"
-                        autocomplete="off"
-                      >{@ai_input_text}</textarea>
-                      <button type="submit" class="btn btn-primary btn-sm h-auto py-2.5 px-3">
-                        <.icon name="hero-sparkles" class="size-4" />
-                      </button>
-                    </div>
-                    <div class="hidden">
-                      <.live_file_input upload={@uploads.recipe_image} id="recipe-image-upload-desktop-hidden" />
-                    </div>
-                  <% end %>
-                </form>
-
-                <%!-- Suggestion chips (chat mode only) --%>
-                <div :if={@ai_input_mode == :describe} class="flex flex-wrap gap-1.5 mt-2">
-                  <button
-                    :for={suggestion <- suggestions()}
-                    type="button"
-                    phx-click="use_suggestion"
-                    phx-value-text={suggestion}
-                    class="px-2.5 py-1 rounded-full text-xs border border-base-300/50 bg-base-200/40 text-base-content/60 hover:bg-base-200 hover:text-base-content transition-all"
-                  >
-                    {suggestion}
-                  </button>
-                </div>
-                <% end %>
-                <% end %>
-              <% end %>
-            </div>
-
-          <% else %>
-            <%!-- Manual mode info --%>
-            <div class="flex-1 flex items-center justify-center p-8 text-center text-base-content/30">
-              <div>
-                <.icon name="hero-pencil-square" class="size-10 mx-auto mb-3 text-base-content/20" />
-                <p class="text-sm font-medium">Fill in the form on the right</p>
-                <p class="text-xs mt-1">Add your recipe details manually</p>
               </div>
-            </div>
-          <% end %>
+            <% end %>
+          </div>
+
         </div>
-
-        <%!-- Right: Recipe form or placeholder --%>
-        <div class="flex-1 min-w-0 pb-8">
-          <%= if @ui_state == :recipe_ready || @creation_mode == :manual do %>
-            <.recipe_form
-              form={@form}
-              action={@action}
-              recipe={@recipe}
-              tags_input={@tags_input}
-              uploads={@uploads}
-              unit_system={@current_user.unit_system}
-            />
-          <% else %>
-            <div class="min-h-[500px] rounded-2xl border-2 border-dashed border-base-300/50 flex flex-col items-center justify-center gap-4 p-10 text-center">
-              <div class="w-16 h-16 rounded-2xl bg-base-200 flex items-center justify-center">
-                <.icon name="hero-book-open" class="size-8 text-base-content/20" />
-              </div>
-              <div>
-                <p class="font-medium text-base-content/30">Your recipe will appear here</p>
-                <p class="text-sm text-base-content/20 mt-1">
-                  {if @creation_mode == :ai,
-                    do: "Describe a recipe in the chat to get started",
-                    else: "Switch to Manual tab to fill in details"}
-                </p>
-              </div>
-            </div>
-          <% end %>
-        </div>
-
       </div>
     <% end %>
     """
@@ -1100,8 +1167,9 @@ defmodule CookbookWeb.RecipeFormLive do
   # ── Recipe Form Component ──
 
   defp recipe_form(assigns) do
+    assigns = assign_new(assigns, :form_id, fn -> "recipe-form" end)
     ~H"""
-    <.form for={@form} id="recipe-form" phx-change="validate" phx-submit="save" class="space-y-6">
+    <.form for={@form} id={@form_id} phx-change="validate" phx-submit="save" class="space-y-6">
       <%!-- Basic info card --%>
       <div class="rounded-xl border border-base-300/50 bg-base-200 p-6 space-y-4">
         <h3 class="font-semibold text-base flex items-center gap-2">
