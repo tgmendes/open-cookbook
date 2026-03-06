@@ -51,7 +51,6 @@ defmodule CookbookWeb.RecipeFormLive do
           page_full_width: true,
           ui_state: :creator_input,
           ai_input_text: "",
-          ai_input_mode: :describe,
           ai_loading: false,
           ai_loading_message: "",
           ai_error: nil,
@@ -76,15 +75,6 @@ defmodule CookbookWeb.RecipeFormLive do
     {:noreply, assign(socket, ai_input_text: text)}
   end
 
-  def handle_event("set_ai_input_mode", %{"mode" => mode}, socket) do
-    mode_atom = case mode do
-      "url" -> :url
-      "screenshot" -> :screenshot
-      _ -> :describe
-    end
-    {:noreply, assign(socket, ai_input_mode: mode_atom, creation_mode: :ai, ai_error: nil)}
-  end
-
   def handle_event("set_creation_mode", %{"mode" => mode}, socket) do
     {:noreply, assign(socket, creation_mode: if(mode == "manual", do: :manual, else: :ai))}
   end
@@ -101,7 +91,10 @@ defmodule CookbookWeb.RecipeFormLive do
     {:noreply, assign(socket, ai_feedback: nil)}
   end
 
-  def handle_event("ai_submit", _params, socket) do
+  def handle_event("ai_submit", params, socket) do
+    # Read from form params first (handles mobile paste which doesn't trigger phx-keyup)
+    input_text = String.trim(Map.get(params, "ai_input", socket.assigns.ai_input_text))
+    socket = assign(socket, ai_input_text: input_text)
     uploads = socket.assigns.uploads.recipe_image.entries
 
     cond do
@@ -135,9 +128,8 @@ defmodule CookbookWeb.RecipeFormLive do
 
         {:noreply, socket}
 
-      socket.assigns.ai_input_mode == :url ||
-          Regex.match?(~r/https?:\/\//, socket.assigns.ai_input_text) ->
-        text = String.trim(socket.assigns.ai_input_text)
+      Regex.match?(~r/https?:\/\//, input_text) ->
+        text = input_text
 
         url =
           Regex.run(~r/https?:\/\/[^\s]+/, text)
@@ -171,12 +163,10 @@ defmodule CookbookWeb.RecipeFormLive do
         end
 
       true ->
-        text = String.trim(socket.assigns.ai_input_text)
-
-        if text == "" do
+        if input_text == "" do
           {:noreply, assign(socket, ai_error: "Please describe what you'd like to cook.")}
         else
-          user_msg = %{role: :user, content: text}
+          user_msg = %{role: :user, content: input_text}
           messages = socket.assigns.messages ++ [user_msg]
 
           socket =
@@ -193,7 +183,7 @@ defmodule CookbookWeb.RecipeFormLive do
           self_pid = self()
 
           Task.start(fn ->
-            result = Cookbook.AI.suggest_recipes(text)
+            result = Cookbook.AI.suggest_recipes(input_text)
             send(self_pid, {:ai_suggestions_result, result})
           end)
 
@@ -538,7 +528,6 @@ defmodule CookbookWeb.RecipeFormLive do
           <% :creator_input -> %>
             <.creator_input
               ai_input_text={@ai_input_text}
-              ai_input_mode={@ai_input_mode}
               ai_error={@ai_error}
               uploads={@uploads}
             />
@@ -593,30 +582,17 @@ defmodule CookbookWeb.RecipeFormLive do
               Manual
             </button>
             <button
-              phx-click="set_ai_input_mode"
-              phx-value-mode="url"
+              phx-click="set_creation_mode"
+              phx-value-mode="ai"
               class={[
                 "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                if(@creation_mode == :ai && @ai_input_mode == :url,
+                if(@creation_mode == :ai,
                   do: "bg-primary text-primary-content",
                   else: "text-base-content/60 hover:text-base-content hover:bg-base-200"
                 )
               ]}
             >
-              Import URL
-            </button>
-            <button
-              phx-click="set_ai_input_mode"
-              phx-value-mode="describe"
-              class={[
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                if(@creation_mode == :ai && @ai_input_mode == :describe,
-                  do: "bg-primary text-primary-content",
-                  else: "text-base-content/60 hover:text-base-content hover:bg-base-200"
-                )
-              ]}
-            >
-              Describe with AI
+              AI
             </button>
           </div>
 
@@ -779,9 +755,9 @@ defmodule CookbookWeb.RecipeFormLive do
                   </div>
 
                 <% @creation_mode == :manual -> %>
-                  <p class="text-xs text-center text-base-content/30 py-1">Select an AI mode above to start chatting</p>
+                  <p class="text-xs text-center text-base-content/30 py-1">Switch to AI mode to use the assistant</p>
 
-                <% @ai_input_mode == :screenshot -> %>
+                <% true -> %>
                   <form
                     id="creator-form-desktop"
                     phx-submit="ai_submit"
@@ -799,45 +775,27 @@ defmodule CookbookWeb.RecipeFormLive do
                         <.icon name="hero-x-mark" class="size-4" />
                       </button>
                     </div>
-                    <label class="flex flex-col items-center justify-center w-full h-24 rounded-xl border-2 border-dashed border-base-300/50 hover:border-primary/40 cursor-pointer transition-colors bg-base-200/40 hover:bg-base-200/60">
-                      <.icon name="hero-photo" class="size-6 text-base-content/30 mb-1" />
-                      <span class="text-xs text-base-content/40">Click to upload a recipe photo</span>
-                      <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload-desktop" />
-                    </label>
-                    <button type="submit" class="w-full btn btn-primary btn-sm gap-1.5" disabled={@uploads.recipe_image.entries == []}>
-                      <.icon name="hero-sparkles" class="size-4" /> Extract Recipe
-                    </button>
-                  </form>
-
-                <% true -> %>
-                  <form
-                    id="creator-form-desktop"
-                    phx-submit="ai_submit"
-                    phx-change="validate-upload"
-                    class="space-y-2"
-                  >
-                    <div :if={@ai_error} class="flex items-center gap-1.5 text-xs text-error">
-                      <.icon name="hero-exclamation-circle" class="size-3.5 shrink-0" />
-                      {@ai_error}
-                    </div>
                     <div class="flex gap-2 items-end">
                       <textarea
                         name="ai_input"
                         phx-keyup="ai_validate"
                         rows="2"
-                        placeholder={if @ai_input_mode == :url, do: "Paste a recipe URL...", else: "Describe what you'd like to cook..."}
+                        placeholder="Describe a recipe or paste a URL..."
                         class="flex-1 textarea textarea-bordered textarea-sm resize-none text-sm"
                         autocomplete="off"
                       >{@ai_input_text}</textarea>
-                      <button type="submit" class="btn btn-primary btn-sm h-auto py-2.5 px-3">
-                        <.icon name="hero-sparkles" class="size-4" />
-                      </button>
-                    </div>
-                    <div class="hidden">
-                      <.live_file_input upload={@uploads.recipe_image} id="recipe-image-upload-desktop-hidden" />
+                      <div class="flex flex-col gap-1">
+                        <label class="btn btn-ghost btn-sm btn-square cursor-pointer text-base-content/40 hover:text-base-content" title="Upload a photo">
+                          <.icon name="hero-photo" class="size-4" />
+                          <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload-desktop" />
+                        </label>
+                        <button type="submit" class="btn btn-primary btn-sm btn-square">
+                          <.icon name="hero-sparkles" class="size-4" />
+                        </button>
+                      </div>
                     </div>
                   </form>
-                  <div :if={@ai_input_mode == :describe} class="flex flex-wrap gap-1.5 mt-2">
+                  <div class="flex flex-wrap gap-1.5 mt-2">
                     <button
                       :for={suggestion <- suggestions()}
                       type="button"
@@ -905,11 +863,7 @@ defmodule CookbookWeb.RecipeFormLive do
               name="ai_input"
               phx-keyup="ai_validate"
               rows="3"
-              placeholder={
-                if @ai_input_mode == :url,
-                  do: "Paste a recipe URL here...",
-                  else: "Describe the recipe you'd like to create..."
-              }
+              placeholder="Describe a recipe, paste a URL, or upload a photo..."
               class="w-full bg-transparent border-0 focus:ring-0 resize-none text-base placeholder:text-base-content/30 p-0"
               autocomplete="off"
             >{@ai_input_text}</textarea>
@@ -917,25 +871,11 @@ defmodule CookbookWeb.RecipeFormLive do
 
           <%!-- Card footer --%>
           <div class="flex items-center justify-between px-4 py-3 border-t border-base-300/30">
-            <div class="flex items-center gap-2">
-              <%!-- Photo upload --%>
-              <label class="btn btn-ghost btn-sm btn-circle cursor-pointer text-base-content/50 hover:text-base-content">
-                <.icon name="hero-photo" class="size-5" />
-                <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload" />
-              </label>
-              <%!-- URL mode toggle --%>
-              <button
-                type="button"
-                phx-click="set_ai_input_mode"
-                phx-value-mode={if @ai_input_mode == :url, do: "describe", else: "url"}
-                class={[
-                  "btn btn-ghost btn-sm btn-circle",
-                  @ai_input_mode == :url && "text-primary" || "text-base-content/50 hover:text-base-content"
-                ]}
-              >
-                <.icon name="hero-link" class="size-5" />
-              </button>
-            </div>
+            <%!-- Photo upload --%>
+            <label class="btn btn-ghost btn-sm btn-circle cursor-pointer text-base-content/50 hover:text-base-content">
+              <.icon name="hero-photo" class="size-5" />
+              <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload" />
+            </label>
 
             <button
               type="submit"
