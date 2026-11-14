@@ -1,0 +1,140 @@
+.gitignore
+  h_2620cc60cfd1e9 8
+README.md
+  h_2620cc60cfd1e9 3,7,10,12-16,53,64-81
+assets/js/app.js
+  h_2620cc60cfd1e9 50
+config/config.exs
+  h_2620cc60cfd1e9 13,47,63
+config/prod.exs
+  h_2620cc60cfd1e9 2
+config/runtime.exs
+  h_2620cc60cfd1e9 104
+docs/speakeasy-setup.md
+  h_2620cc60cfd1e9 1-75
+docs/superpowers/plans/2026-11-13-private-cookbook-api.md
+  h_2620cc60cfd1e9 1-207
+lib/cookbook/accounts.ex
+  h_2620cc60cfd1e9 8,16,24-28,38-66,70-78,95,112,121-129,131,133-135,137-150,154-196,209-211,217-223
+lib/cookbook/accounts/api_token.ex
+  h_2620cc60cfd1e9 1-24
+lib/cookbook/accounts/login_token.ex
+  h_2620cc60cfd1e9 17
+lib/cookbook/api_request.ex
+  h_2620cc60cfd1e9 1-12
+lib/cookbook/api_requests.ex
+  h_2620cc60cfd1e9 1-46
+lib/cookbook/planner.ex
+  h_2620cc60cfd1e9 42-48,55,62-144,153,156-157,172,179-180,183,185,206-215
+lib/cookbook/planner/meal_plan.ex
+  h_2620cc60cfd1e9 19
+lib/cookbook/planner/meal_plan_entry.ex
+  h_2620cc60cfd1e9 18
+lib/cookbook/recipes.ex
+  h_2620cc60cfd1e9 22-23,27-65,73-79
+lib/cookbook/recipes/ingredient.ex
+  h_2620cc60cfd1e9 7-18
+lib/cookbook/recipes/recipe.ex
+  h_2620cc60cfd1e9 21-25,34-43,46-51,53-62,66-74
+lib/cookbook/recipes/scaling.ex
+  h_2620cc60cfd1e9 1-56
+lib/cookbook/recipes/step.ex
+  h_2620cc60cfd1e9 19
+lib/cookbook_web.ex
+  h_2620cc60cfd1e9 54
+lib/cookbook_web/auth.ex
+  h_2620cc60cfd1e9 2,8-23,25,29-50,52-54,56-58,60-62,64,69-70,74,76-78,81-82,88
+lib/cookbook_web/components/core_components.ex
+  h_2620cc60cfd1e9 318-321
+lib/cookbook_web/components/layouts.ex
+  h_2620cc60cfd1e9 39-42,68-69,73,79-80,84,90-91,95,101-102,106,111-117,124-126,138,140,143-144,149,154-157,170-176,178-182,200-201,211-212,222-223,233-234
+lib/cookbook_web/components/layouts/root.html.heex
+  h_2620cc60cfd1e9 17-20
+lib/cookbook_web/controllers/api_auth.ex
+  h_2620cc60cfd1e9 1-4,6,8-9,11-22
+lib/cookbook_web/controllers/api_fallback_controller.ex
+  h_2620cc60cfd1e9 1-22
+lib/cookbook_web/controllers/api_input.ex
+  h_2620cc60cfd1e9 1-28,30-32,34,36-37,39-41,43-51,53-55,57-58,62-67,69,73-76,80,82-86,89,91-100
+lib/cookbook_web/controllers/auth_controller.ex
+  h_2620cc60cfd1e9 10,12,24-29,32
+lib/cookbook_web/controllers/cookbook_api_controller.ex
+  h_2620cc60cfd1e9 1-92
+lib/cookbook_web/controllers/cookbook_json.ex
+  h_2620cc60cfd1e9 1-56
+lib/cookbook_web/controllers/open_api_controller.ex
+  h_2620cc60cfd1e9 1-4
+lib/cookbook_web/endpoint.ex
+  h_2620cc60cfd1e9 11-14
+lib/cookbook_web/live/api_token_live.ex
+  h_2620cc60cfd1e9 1-149
+lib/cookbook_web/live/cook_mode_live.ex
+  h_2620cc60cfd1e9 4,7,69-84,137-141,143-170,174-175,177-186,188-197,199-202,205,207,212-219,221-222,224-226,228-257,260-268,270-290,292-294,297-313,315-321,323-333,337-358,360-390,393,395-415,418-438,440-453,456
+lib/cookbook_web/live/dashboard_live.ex
+  h_2620cc60cfd1e9 47-72,74-100,102-110,113-115,117-125,127-145,147-166,168,170-197,203-213,215-238,241-246,248-259,264-273,275-277
+lib/cookbook_web/live/login_live.ex
+  h_2620cc60cfd1e9 10,13-18,23-30,33-34,59-78,81-87,89-100,102-106,108,110-119,122-186,188-210,215
+lib/cookbook_web/live/planner_live.ex
+  h_2620cc60cfd1e9 49-50,73,89,108-113,130-173,175-187,189-199,201-218,220-250,252-253,255,257-260,262,270-289,292-313,315-327,331,349,352,355,398-401
+lib/cookbook_web/live/recipe_form_live.ex
+  h_2620cc60cfd1e9 7,9-10,13-18,20-27,30-31,34-35,37-42,44-49,51-55,57-58,62-63,65,67-71,74-75,77-82,84-88,91,94-95,99-100,102,105-106,109-110,115,117-130,132-133,136,138-141,147-176,178-181,183-186,188,191,193-194,196-203,205-211,213,216-229,231-236,238-244,246,248-264,266,268-269,271,273-275,277,279
+lib/cookbook_web/live/recipe_list_live.ex
+  h_2620cc60cfd1e9 32-37,44-49,55,57-61,68-88,91-114,117-120,122-130,132-152,155-187,189-190,193-201
+lib/cookbook_web/live/recipe_show_live.ex
+  h_2620cc60cfd1e9 4,7,22,41-56,65-85,87-91,93,95,97,99-122,124-155,159-160,163,167-168,171-175,179-182,190-230,233-269,271-273,275-294,297-302,305-313,317-332,334-335,337-346,348-354,357-375,377-380,382-390,392
+lib/cookbook_web/live/shopping_list_live.ex
+  h_2620cc60cfd1e9 14,43-58,60-62,64-72,75-82,84-103,105-125,127
+lib/cookbook_web/open_api.ex
+  h_2620cc60cfd1e9 1-339
+lib/cookbook_web/router.ex
+  h_2620cc60cfd1e9 4-5,15,22-38,43,52,68
+lib/mix/tasks/cookbook.openapi.ex
+  h_2620cc60cfd1e9 1-29
+priv/openapi.json
+  h_2620cc60cfd1e9 1-1355
+priv/repo/migrations/20260223103100_create_recipes.exs
+  h_2620cc60cfd1e9 5-6
+priv/repo/migrations/20260223103200_create_meal_plans.exs
+  h_2620cc60cfd1e9 20-23
+priv/repo/migrations/20261113183015_create_api_tokens.exs
+  h_2620cc60cfd1e9 1-18
+priv/repo/migrations/20261113183725_create_api_requests.exs
+  h_2620cc60cfd1e9 1-17
+test/cookbook/accounts_test.exs
+  h_2620cc60cfd1e9 41-63,65-92
+test/cookbook/api_tokens_test.exs
+  h_2620cc60cfd1e9 1-80
+test/cookbook/planner_test.exs
+  h_2620cc60cfd1e9 14,56,71,77,89-99,101,113,127-143,145
+test/cookbook/recipes_test.exs
+  h_2620cc60cfd1e9 31-40,48,50,54,64,69,71-72,77,79-81,87-91,96-97,105-111,121-127
+test/cookbook/scaling_test.exs
+  h_2620cc60cfd1e9 1-21
+test/cookbook_web/auth_test.exs
+  h_2620cc60cfd1e9 1-36
+test/cookbook_web/controllers/auth_controller_test.exs
+  h_2620cc60cfd1e9 17,26-39,42-48,54-55,58
+test/cookbook_web/controllers/cookbook_api_controller_test.exs
+  h_2620cc60cfd1e9 1-55,59-65,67-75,77-158,160-161,164-172,174-178,182-192,194-195,198-201,203-207,209-214,216-217,219-225,228-234,236-250,253-255,257-264,266-267,269-270,272-275,278-282,284-292,294-298,302-303,305-307,309-310
+test/cookbook_web/controllers/open_api_controller_test.exs
+  h_2620cc60cfd1e9 1-69
+test/cookbook_web/live/api_token_live_test.exs
+  h_2620cc60cfd1e9 1-42
+test/cookbook_web/live/cookbook_live_test.exs
+  h_2620cc60cfd1e9 1-145
+test/cookbook_web/live/login_live_test.exs
+  h_2620cc60cfd1e9 1-22
+test/support/failing_mail_adapter.ex
+  h_2620cc60cfd1e9 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91d3b73667e9f475b86e643c90f995a7f4581906",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
