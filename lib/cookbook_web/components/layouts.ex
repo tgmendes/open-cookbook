@@ -36,7 +36,10 @@ defmodule CookbookWeb.Layouts do
     default: nil,
     doc: "the current scope"
 
-  slot :inner_block, required: true
+  attr :current_user, :any, default: nil
+  attr :nav_path, :string, default: ""
+  attr :page_full_width, :boolean, default: false
+  slot :inner_block
 
   def app(assigns) do
     ~H"""
@@ -62,60 +65,65 @@ defmodule CookbookWeb.Layouts do
             navigate="/"
             class={[
               "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
-              nav_active?(assigns, "/") &&
-                "bg-primary/10 text-primary" ||
+              (nav_active?(assigns, "/") &&
+                 "bg-primary/10 text-primary") ||
                 "text-base-content/60 hover:text-base-content hover:bg-base-300/50"
             ]}
           >
-            <.icon name="hero-squares-2x2" class="size-4 shrink-0" />
-            Dashboard
+            <.icon name="hero-squares-2x2" class="size-4 shrink-0" /> Dashboard
           </.link>
           <.link
             navigate="/recipes"
             class={[
               "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
-              nav_active?(assigns, "/recipes") &&
-                "bg-primary/10 text-primary" ||
+              (nav_active?(assigns, "/recipes") &&
+                 "bg-primary/10 text-primary") ||
                 "text-base-content/60 hover:text-base-content hover:bg-base-300/50"
             ]}
           >
-            <.icon name="hero-book-open" class="size-4 shrink-0" />
-            Recipes
+            <.icon name="hero-book-open" class="size-4 shrink-0" /> Recipes
           </.link>
           <.link
             navigate="/planner"
             class={[
               "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
-              nav_active?(assigns, "/planner") &&
-                "bg-primary/10 text-primary" ||
+              (nav_active?(assigns, "/planner") &&
+                 "bg-primary/10 text-primary") ||
                 "text-base-content/60 hover:text-base-content hover:bg-base-300/50"
             ]}
           >
-            <.icon name="hero-calendar-days" class="size-4 shrink-0" />
-            Meal Plan
+            <.icon name="hero-calendar-days" class="size-4 shrink-0" /> Meal Plan
           </.link>
           <.link
             navigate="/planner/shopping"
             class={[
               "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
-              nav_active?(assigns, "/planner/shopping") &&
-                "bg-primary/10 text-primary" ||
+              (nav_active?(assigns, "/planner/shopping") &&
+                 "bg-primary/10 text-primary") ||
                 "text-base-content/60 hover:text-base-content hover:bg-base-300/50"
             ]}
           >
-            <.icon name="hero-shopping-cart" class="size-4 shrink-0" />
-            Shopping List
+            <.icon name="hero-shopping-cart" class="size-4 shrink-0" /> Shopping List
           </.link>
         </nav>
 
         <div class="px-3 py-4 border-t border-base-300/50 space-y-0.5">
+          <.link
+            id="connections-link"
+            navigate="/settings/connections"
+            class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-base-content/60 transition-colors hover:bg-base-200"
+          >
+            <.icon name="hero-key" class="size-4" /> Connections
+          </.link>
           <button
             phx-click="toggle_unit_system"
             class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-base-content/50 hover:text-base-content hover:bg-base-300/50 transition-all duration-200"
             title={"Switch to #{if assigns[:current_user] && assigns[:current_user].unit_system == "metric", do: "imperial", else: "metric"} units"}
           >
             <.icon name="hero-scale" class="size-4 shrink-0" />
-            <span class="capitalize">{assigns[:current_user] && assigns[:current_user].unit_system || "metric"}</span>
+            <span class="capitalize">
+              {(assigns[:current_user] && assigns[:current_user].unit_system) || "metric"}
+            </span>
           </button>
           <button
             phx-click={JS.dispatch("toggle-theme")}
@@ -127,24 +135,26 @@ defmodule CookbookWeb.Layouts do
             <span class="dark:hidden">Light mode</span>
             <span class="hidden dark:block">Dark mode</span>
           </button>
-          <a
+          <.link
             href="/auth/logout"
+            method="delete"
             class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-base-content/50 hover:text-base-content hover:bg-base-300/50 transition-all duration-200"
           >
-            <.icon name="hero-arrow-right-on-rectangle" class="size-4 shrink-0" />
-            Log out
-          </a>
+            <.icon name="hero-arrow-right-on-rectangle" class="size-4 shrink-0" /> Log out
+          </.link>
           <.link
             navigate="/recipes/new"
             class="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-primary text-primary-content text-sm font-semibold hover:bg-primary/90 transition-colors"
           >
-            <.icon name="hero-plus" class="size-4" />
-            New Recipe
+            <.icon name="hero-plus" class="size-4" /> New Recipe
           </.link>
         </div>
 
         <%!-- User avatar --%>
-        <div :if={assigns[:current_user]} class="px-4 py-4 border-t border-base-300/50 flex items-center gap-3">
+        <div
+          :if={assigns[:current_user]}
+          class="px-4 py-4 border-t border-base-300/50 flex items-center gap-3"
+        >
           <div class="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-content text-sm font-bold shrink-0">
             {String.first(assigns[:current_user].email) |> String.upcase()}
           </div>
@@ -157,9 +167,19 @@ defmodule CookbookWeb.Layouts do
 
       <%!-- Main content with sidebar offset on desktop --%>
       <div class={[assigns[:current_user] && "lg:pl-56"]}>
-        <main class={["px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-20 lg:pb-8", assigns[:page_full_width] && "!p-0"]}>
+        <main
+          id="cookbook-content"
+          class={[
+            "px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-20 lg:pb-8",
+            assigns[:page_full_width] && "!p-0"
+          ]}
+        >
           <div class={["mx-auto", !assigns[:page_full_width] && "max-w-5xl"]}>
-            {@inner_content}
+            <%= if assigns[:inner_block] && @inner_block != [] do %>
+              {render_slot(@inner_block)}
+            <% else %>
+              {assigns[:inner_content]}
+            <% end %>
           </div>
         </main>
       </div>
@@ -177,7 +197,8 @@ defmodule CookbookWeb.Layouts do
           navigate="/"
           class={[
             "flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium transition-colors",
-            nav_active?(assigns, "/") && "text-primary" || "text-base-content/40 hover:text-base-content/70"
+            (nav_active?(assigns, "/") && "text-primary") ||
+              "text-base-content/40 hover:text-base-content/70"
           ]}
         >
           <.icon name="hero-home" class="size-5" />
@@ -187,7 +208,8 @@ defmodule CookbookWeb.Layouts do
           navigate="/recipes"
           class={[
             "flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium transition-colors",
-            nav_active?(assigns, "/recipes") && "text-primary" || "text-base-content/40 hover:text-base-content/70"
+            (nav_active?(assigns, "/recipes") && "text-primary") ||
+              "text-base-content/40 hover:text-base-content/70"
           ]}
         >
           <.icon name="hero-book-open" class="size-5" />
@@ -197,7 +219,8 @@ defmodule CookbookWeb.Layouts do
           navigate="/planner"
           class={[
             "flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium transition-colors",
-            nav_active?(assigns, "/planner") && "text-primary" || "text-base-content/40 hover:text-base-content/70"
+            (nav_active?(assigns, "/planner") && "text-primary") ||
+              "text-base-content/40 hover:text-base-content/70"
           ]}
         >
           <.icon name="hero-calendar-days" class="size-5" />
@@ -207,7 +230,8 @@ defmodule CookbookWeb.Layouts do
           navigate="/planner/shopping"
           class={[
             "flex flex-col items-center justify-center gap-1 flex-1 text-xs font-medium transition-colors",
-            nav_active?(assigns, "/planner/shopping") && "text-primary" || "text-base-content/40 hover:text-base-content/70"
+            (nav_active?(assigns, "/planner/shopping") && "text-primary") ||
+              "text-base-content/40 hover:text-base-content/70"
           ]}
         >
           <.icon name="hero-shopping-cart" class="size-5" />

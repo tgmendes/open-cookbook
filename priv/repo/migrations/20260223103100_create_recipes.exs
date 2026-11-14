@@ -2,7 +2,8 @@ defmodule Cookbook.Repo.Migrations.CreateRecipes do
   use Ecto.Migration
 
   def change do
-    execute "CREATE TYPE source_type AS ENUM ('manual', 'scraped', 'generated')", "DROP TYPE source_type"
+    execute "CREATE TYPE source_type AS ENUM ('manual', 'scraped', 'generated')",
+            "DROP TYPE source_type"
 
     create table(:recipes, primary_key: false) do
       add :id, :binary_id, primary_key: true

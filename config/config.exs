@@ -10,8 +10,7 @@ import Config
 config :cookbook,
   ecto_repos: [Cookbook.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true],
-  allowed_email: System.get_env("ALLOWED_EMAIL"),
-  openrouter_api_key: System.get_env("OPENROUTER_API_KEY")
+  allowed_email: System.get_env("ALLOWED_EMAIL")
 
 # Configure the endpoint
 config :cookbook, CookbookWeb.Endpoint,
@@ -45,7 +44,7 @@ config :esbuild,
 
 # Configure tailwind (the version is required)
 config :tailwind,
-  version: "4.1.12",
+  version: "4.3.5",
   cookbook: [
     args: ~w(
       --input=assets/css/app.css
@@ -61,6 +60,7 @@ config :logger, :default_formatter,
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
+config :phoenix, :filter_parameters, ["password", "token", "authorization", "raw_token"]
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

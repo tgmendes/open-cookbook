@@ -14,7 +14,7 @@ defmodule Cookbook.Accounts.LoginToken do
 
   def changeset(login_token, attrs) do
     login_token
-    |> cast(attrs, [:token, :expires_at, :user_id])
+    |> cast(attrs, [:token, :expires_at])
     |> validate_required([:token, :expires_at, :user_id])
     |> unique_constraint(:token)
     |> foreign_key_constraint(:user_id)

@@ -38,7 +38,58 @@ defmodule Cookbook.AccountsTest do
     end
   end
 
+  describe "request_login_token/1" do
+    test "limits delivery requests to one per minute" do
+      assert {:ok, user, _raw} = Accounts.request_login_token(@allowed_email)
+      assert {:error, :rate_limited} = Accounts.request_login_token(@allowed_email)
+
+      from(token in Accounts.LoginToken, where: token.user_id == ^user.id)
+      |> Repo.update_all(
+        set: [
+          expires_at:
+            DateTime.utc_now() |> DateTime.add(8 * 60, :second) |> DateTime.truncate(:second)
+        ]
+      )
+
+      assert {:ok, _, _} = Accounts.request_login_token(@allowed_email)
+    end
+
+    test "malformed and unauthorized addresses are rejected" do
+      for email <- [nil, %{}, "", "other@example.com"] do
+        assert {:error, :unauthorized} = Accounts.request_login_token(email)
+      end
+    end
+  end
+
   describe "verify_login_token/1" do
+    test "rejects malformed tokens without raising" do
+      for token <- [nil, %{}, [], 12, ""] do
+        assert {:error, :invalid_token} = Accounts.verify_login_token(token)
+      end
+    end
+
+    test "rejects a token when its owner is no longer allowed" do
+      {:ok, user} = Accounts.get_or_create_user_by_email(@allowed_email)
+      {:ok, token} = Accounts.create_login_token(user)
+      user |> Ecto.Changeset.change(email: "removed@example.com") |> Repo.update!()
+      assert {:error, :invalid_token} = Accounts.verify_login_token(token)
+    end
+
+    test "only one concurrent consumer can claim a token" do
+      {:ok, user} = Accounts.get_or_create_user_by_email(@allowed_email)
+      {:ok, token} = Accounts.create_login_token(user)
+      supervisor = start_supervised!(Task.Supervisor)
+
+      results =
+        1..2
+        |> Enum.map(fn _ ->
+          Task.Supervisor.async_nolink(supervisor, fn -> Accounts.verify_login_token(token) end)
+        end)
+        |> Enum.map(&Task.await/1)
+
+      assert Enum.count(results, &match?({:ok, _}, &1)) == 1
+    end
+
     test "verifies a valid token and returns the user" do
       {:ok, user} = Accounts.get_or_create_user_by_email(@allowed_email)
       {:ok, raw_token} = Accounts.create_login_token(user)

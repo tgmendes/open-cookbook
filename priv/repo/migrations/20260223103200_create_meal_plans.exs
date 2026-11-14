@@ -17,7 +17,10 @@ defmodule Cookbook.Repo.Migrations.CreateMealPlans do
 
     create table(:meal_plan_entries, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :meal_plan_id, references(:meal_plans, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :meal_plan_id, references(:meal_plans, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :recipe_id, references(:recipes, type: :binary_id, on_delete: :delete_all), null: false
       add :day_of_week, :integer, null: false
       add :meal_type, :meal_type, null: false

@@ -101,8 +101,7 @@ if config_env() == :prod do
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
   config :cookbook,
-    allowed_email: System.get_env("ALLOWED_EMAIL"),
-    openrouter_api_key: System.get_env("OPENROUTER_API_KEY")
+    allowed_email: System.get_env("ALLOWED_EMAIL")
 
   config :cookbook, Cookbook.Mailer,
     adapter: Swoosh.Adapters.Resend,

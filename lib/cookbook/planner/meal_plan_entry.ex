@@ -15,7 +15,7 @@ defmodule Cookbook.Planner.MealPlanEntry do
 
   def changeset(entry, attrs) do
     entry
-    |> cast(attrs, [:day_of_week, :meal_type, :position, :meal_plan_id, :recipe_id])
+    |> cast(attrs, [:day_of_week, :meal_type, :position])
     |> validate_required([:day_of_week, :meal_type, :meal_plan_id, :recipe_id])
     |> validate_inclusion(:day_of_week, 1..7)
     |> unique_constraint([:meal_plan_id, :day_of_week, :meal_type, :position])

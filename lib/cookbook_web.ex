@@ -51,7 +51,7 @@ defmodule CookbookWeb do
   def live_view do
     quote do
       use Phoenix.LiveView,
-        layout: {CookbookWeb.Layouts, :app}
+        layout: false
 
       unquote(html_helpers())
     end

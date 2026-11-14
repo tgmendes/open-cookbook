@@ -39,19 +39,106 @@ defmodule Cookbook.Planner do
 
     case Repo.get_by(MealPlan, user_id: user_id, week_start: week_start) do
       nil ->
-        %MealPlan{}
-        |> MealPlan.changeset(%{user_id: user_id, week_start: week_start})
-        |> Repo.insert()
+        %MealPlan{user_id: user_id}
+        |> MealPlan.changeset(%{week_start: week_start})
+        |> Repo.insert(on_conflict: :nothing, conflict_target: [:user_id, :week_start])
+        |> case do
+          {:ok, _} -> {:ok, Repo.get_by!(MealPlan, user_id: user_id, week_start: week_start)}
+          error -> error
+        end
 
       plan ->
         {:ok, plan}
     end
     |> case do
       {:ok, plan} ->
-        {:ok, Repo.preload(plan, entries: [:recipe])}
+        {:ok, preload_owned_entries(plan, user_id)}
 
       error ->
         error
+    end
+  end
+
+  def get_plan_for_week(user_id, date) do
+    week = normalize_to_monday(date)
+
+    case Repo.get_by(MealPlan, user_id: user_id, week_start: week) do
+      nil -> %MealPlan{user_id: user_id, week_start: week, entries: []}
+      plan -> preload_owned_entries(plan, user_id)
+    end
+  end
+
+  def replace_slot(user_id, date, day, meal, recipe_ids) do
+    Repo.transaction(fn ->
+      recipes =
+        Enum.map(recipe_ids, fn id ->
+          case Cookbook.Recipes.get_recipe(user_id, id) do
+            {:ok, recipe} -> recipe
+            {:error, reason} -> Repo.rollback(reason)
+          end
+        end)
+
+      {:ok, plan} = get_or_create_plan_for_week(user_id, date)
+      _ = Repo.one!(from p in MealPlan, where: p.id == ^plan.id, lock: "FOR UPDATE")
+
+      from(e in MealPlanEntry,
+        where: e.meal_plan_id == ^plan.id and e.day_of_week == ^day and e.meal_type == ^meal
+      )
+      |> Repo.delete_all()
+
+      Enum.with_index(recipes, fn recipe, position ->
+        %MealPlanEntry{meal_plan_id: plan.id, recipe_id: recipe.id}
+        |> MealPlanEntry.changeset(%{day_of_week: day, meal_type: meal, position: position})
+        |> Repo.insert!()
+      end)
+
+      get_plan_for_week(user_id, date)
+    end)
+  end
+
+  def add_entry(user_id, plan_id, attrs) do
+    with {:ok, id} <- Ecto.UUID.cast(plan_id),
+         %MealPlan{} = plan <- Repo.get_by(MealPlan, id: id, user_id: user_id),
+         {:ok, _} <- Cookbook.Recipes.get_recipe(user_id, attrs.recipe_id) do
+      Repo.transaction(fn ->
+        _ = Repo.one!(from p in MealPlan, where: p.id == ^plan.id, lock: "FOR UPDATE")
+
+        case add_entry(plan, attrs) do
+          {:ok, entry} -> entry
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  def remove_entry(user_id, id) do
+    with {:ok, id} <- Ecto.UUID.cast(id),
+         %MealPlanEntry{} = entry <-
+           Repo.one(
+             from e in MealPlanEntry,
+               join: p in assoc(e, :meal_plan),
+               where: e.id == ^id and p.user_id == ^user_id,
+               select: e
+           ) do
+      Repo.delete(entry)
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  def shopping_list_for_week(user_id, date) do
+    plan = get_plan_for_week(user_id, date)
+    if plan.id, do: shopping_list_for_plan(user_id, plan.id), else: []
+  end
+
+  def generate_shopping_list(user_id, plan_id) do
+    with {:ok, id} <- Ecto.UUID.cast(plan_id),
+         %MealPlan{} <- Repo.get_by(MealPlan, id: id, user_id: user_id) do
+      shopping_list_for_plan(user_id, id)
+    else
+      _ -> []
     end
   end
 
@@ -63,13 +150,11 @@ defmodule Cookbook.Planner do
     |> where(user_id: ^user_id)
     |> order_by(desc: :week_start)
     |> Repo.all()
-    |> Repo.preload(entries: [:recipe])
+    |> Enum.map(&preload_owned_entries(&1, user_id))
   end
 
-  @doc """
-  Adds a recipe to a meal plan slot.
-  """
-  def add_entry(meal_plan, attrs) do
+  # Caller holds the plan lock and has checked recipe ownership.
+  defp add_entry(meal_plan, attrs) do
     # Find the next position for this slot
     position =
       from(e in MealPlanEntry,
@@ -84,31 +169,20 @@ defmodule Cookbook.Planner do
         max_pos -> max_pos + 1
       end
 
-    %MealPlanEntry{}
+    %MealPlanEntry{meal_plan_id: meal_plan.id, recipe_id: attrs.recipe_id}
     |> MealPlanEntry.changeset(
       Map.merge(attrs, %{meal_plan_id: meal_plan.id, position: position})
     )
     |> Repo.insert()
   end
 
-  @doc """
-  Removes an entry from a meal plan.
-  """
-  def remove_entry(entry_id) do
-    case Repo.get(MealPlanEntry, entry_id) do
-      nil -> {:error, :not_found}
-      entry -> Repo.delete(entry)
-    end
-  end
-
-  @doc """
-  Generates an aggregated shopping list from a meal plan's recipes.
-  Groups ingredients by name and sums quantities where possible.
-  """
-  def generate_shopping_list(meal_plan_id) do
+  # Aggregate only after resolving an owner-scoped plan.
+  defp shopping_list_for_plan(user_id, meal_plan_id) do
     entries =
       from(e in MealPlanEntry,
+        join: recipe in assoc(e, :recipe),
         where: e.meal_plan_id == ^meal_plan_id,
+        where: recipe.user_id == ^user_id,
         preload: [recipe: :ingredients]
       )
       |> Repo.all()
@@ -127,6 +201,16 @@ defmodule Cookbook.Planner do
       }
     end)
     |> Enum.sort_by(& &1.name)
+  end
+
+  defp preload_owned_entries(plan, user_id) do
+    entries =
+      from e in MealPlanEntry,
+        join: recipe in assoc(e, :recipe),
+        where: recipe.user_id == ^user_id,
+        preload: [recipe: recipe]
+
+    Repo.preload(plan, [entries: entries], force: true)
   end
 
   @doc """
