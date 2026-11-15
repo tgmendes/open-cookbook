@@ -45,6 +45,7 @@ defmodule CookbookWeb.Router do
       live "/recipes/:id/cook", CookModeLive, :cook
       live "/planner", PlannerLive, :index
       live "/planner/shopping", ShoppingListLive, :index
+      live "/settings", SettingsLive, :index
     end
   end
 

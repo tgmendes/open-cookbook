@@ -25,6 +25,11 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/cookbook"
 import topbar from "../vendor/topbar"
 
+try {
+  const theme = localStorage.getItem("cookbook-theme")
+  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme
+} catch {}
+
 const ScreenWakeLock = {
   async mounted() {
     if (!navigator.wakeLock) return
@@ -128,4 +133,3 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
-

@@ -31,6 +31,29 @@ defmodule Cookbook.Planner do
 
   def short_day_name(day_of_week), do: Map.get(@short_day_names, day_of_week, "")
 
+  def navigation_summary(user_id) do
+    today = Date.utc_today()
+    monday = normalize_to_monday(today)
+    plan = Repo.get_by(MealPlan, user_id: user_id, week_start: monday)
+
+    if plan do
+      plan = Repo.preload(plan, entries: [:recipe])
+
+      tonight =
+        Enum.find(
+          plan.entries,
+          &(&1.day_of_week == Date.day_of_week(today) && &1.meal_type == :dinner)
+        )
+
+      %{
+        tonight: tonight && tonight.recipe,
+        shopping_count: length(generate_shopping_list(plan.id))
+      }
+    else
+      %{tonight: nil, shopping_count: 0}
+    end
+  end
+
   @doc """
   Gets or creates a meal plan for a given week (identified by the Monday date).
   """

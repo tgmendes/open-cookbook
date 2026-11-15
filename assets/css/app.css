@@ -1,113 +1,157 @@
-/* See the Tailwind configuration guide for advanced usage
-   https://tailwindcss.com/docs/configuration */
-
 @import "tailwindcss" source(none);
 @source "../css";
 @source "../js";
 @source "../../lib/cookbook_web";
-
-/* A Tailwind plugin that makes "hero-#{ICON}" classes available.
-   The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";
-
-/* daisyUI Tailwind Plugin. You can update this file by fetching the latest version with:
-   curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
-   Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
-@plugin "../vendor/daisyui" {
-  themes: false;
-}
-
-/* daisyUI theme plugin. You can update this file by fetching the latest version with:
-  curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.js
-  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
-  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
-@plugin "../vendor/daisyui-theme" {
-  name: "dark";
-  default: false;
-  prefersdark: false;
-  color-scheme: "dark";
-  --color-base-100: oklch(16% 0.03 180);
-  --color-base-200: oklch(20% 0.035 180);
-  --color-base-300: oklch(28% 0.05 180);
-  --color-base-content: oklch(94% 0.03 180);
-  --color-primary: oklch(87% 0.12 175);
-  --color-primary-content: oklch(16% 0.03 180);
-  --color-secondary: oklch(56% 0.135 180);
-  --color-secondary-content: oklch(100% 0 0);
-  --color-accent: oklch(68% 0.065 180);
-  --color-accent-content: oklch(16% 0.03 180);
-  --color-neutral: oklch(28% 0.05 180);
-  --color-neutral-content: oklch(94% 0.03 180);
-  --color-info: oklch(87% 0.12 175);
-  --color-info-content: oklch(16% 0.03 180);
-  --color-success: oklch(70% 0.17 155);
-  --color-success-content: oklch(98% 0.014 180);
-  --color-warning: oklch(75% 0.17 65);
-  --color-warning-content: oklch(25% 0.04 65);
-  --color-error: oklch(65% 0.25 20);
-  --color-error-content: oklch(96% 0.015 12);
-  --radius-selector: 0.5rem;
-  --radius-field: 0.5rem;
-  --radius-box: 0.75rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 1;
-  --noise: 0;
-}
+@plugin "../vendor/daisyui" { themes: false; }
 
 @plugin "../vendor/daisyui-theme" {
   name: "light";
   default: true;
   prefersdark: false;
   color-scheme: "light";
-  --color-base-100: oklch(97% 0.01 80);
-  --color-base-200: oklch(92% 0.02 80);
-  --color-base-300: oklch(88% 0.025 80);
-  --color-base-content: oklch(22% 0.025 180);
-  --color-primary: oklch(56% 0.135 180);
-  --color-primary-content: oklch(100% 0 0);
-  --color-secondary: oklch(87% 0.12 175);
-  --color-secondary-content: oklch(22% 0.025 180);
-  --color-accent: oklch(49% 0.12 180);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(52% 0.015 60);
-  --color-neutral-content: oklch(97% 0.01 80);
-  --color-info: oklch(56% 0.135 180);
-  --color-info-content: oklch(100% 0 0);
-  --color-success: oklch(64% 0.17 155);
-  --color-success-content: oklch(98% 0.014 180);
-  --color-warning: oklch(75% 0.17 65);
-  --color-warning-content: oklch(25% 0.04 65);
-  --color-error: oklch(55% 0.25 20);
-  --color-error-content: oklch(100% 0 0);
-  --radius-selector: 0.5rem;
-  --radius-field: 0.5rem;
-  --radius-box: 0.75rem;
+  --color-base-100: #F3ECE0;
+  --color-base-200: #FBF8F3;
+  --color-base-300: #E2D7C5;
+  --color-base-content: #1E2B2A;
+  --color-primary: #1D756D;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #F7DCC6;
+  --color-secondary-content: #4A2A12;
+  --color-accent: #E4DEF1;
+  --color-accent-content: #2E2650;
+  --color-neutral: #4F5856;
+  --color-neutral-content: #FBF8F3;
+  --color-info: #D5E5EE;
+  --color-info-content: #1F3440;
+  --color-success: #DDE9D3;
+  --color-success-content: #22301E;
+  --color-warning: #F4E6B3;
+  --color-warning-content: #3F3410;
+  --color-error: #F3D7D5;
+  --color-error-content: #4A2320;
+  --radius-selector: 0.75rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1.25rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
-  --depth: 1;
+  --depth: 0;
+  --noise: 0;
+}
+@plugin "../vendor/daisyui-theme" {
+  name: "dark";
+  default: false;
+  prefersdark: false;
+  color-scheme: "dark";
+  --color-base-100: #111212;
+  --color-base-200: #1A1B1B;
+  --color-base-300: #2A2C2C;
+  --color-base-content: #EDEDEA;
+  --color-primary: #5DB5A8;
+  --color-primary-content: #10201E;
+  --color-secondary: #2E2219;
+  --color-secondary-content: #F7DCC6;
+  --color-accent: #232033;
+  --color-accent-content: #E4DEF1;
+  --color-neutral: #C4C6C3;
+  --color-neutral-content: #111212;
+  --color-info: #17242C;
+  --color-info-content: #D5E5EE;
+  --color-success: #1F2A1D;
+  --color-success-content: #CFE3C2;
+  --color-warning: #2B2716;
+  --color-warning-content: #F4E6B3;
+  --color-error: #2E1E1D;
+  --color-error-content: #F3D7D5;
+  --radius-selector: 0.75rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
   --noise: 0;
 }
 
-/* Add variants based on LiveView classes */
+:root, [data-theme="light"] {
+  --ink-secondary: #4F5856;
+  --ink-muted: #5B6461;
+  --border-strong: #CFC3AF;
+  --tag: #F3ECE0;
+  --teal-tint: #D3EAE6;
+  --teal-ink: #155B55;
+  --primary-hover: #155B55;
+  --count: #F7DCC6;
+  --count-ink: #4A2A12;
+  --checkbox: #A99D88;
+}
+[data-theme="dark"] {
+  --ink-secondary: #C4C6C3;
+  --ink-muted: #9A9D9A;
+  --border-strong: #3A3D3D;
+  --tag: #222424;
+  --teal-tint: #16302C;
+  --teal-ink: #8FD3C8;
+  --primary-hover: #8FD3C8;
+  --count: #EFC3A0;
+  --count-ink: #3A2210;
+  --checkbox: #5C605E;
+}
+@theme inline {
+  --font-body: "Lato", system-ui, sans-serif;
+  --font-heading: "Raleway", system-ui, sans-serif;
+  --color-secondary-ink: var(--ink-secondary);
+  --color-muted: var(--ink-muted);
+  --color-strong: var(--border-strong);
+  --color-tag: var(--tag);
+  --color-teal-tint: var(--teal-tint);
+  --color-teal-ink: var(--teal-ink);
+  --color-count: var(--count);
+  --color-count-ink: var(--count-ink);
+  --color-checkbox: var(--checkbox);
+  --color-sage: var(--color-success);
+  --color-sage-ink: var(--color-success-content);
+  --color-peach: var(--color-secondary);
+  --color-peach-ink: var(--color-secondary-content);
+  --color-butter: var(--color-warning);
+  --color-butter-ink: var(--color-warning-content);
+  --color-lavender: var(--color-accent);
+  --color-lavender-ink: var(--color-accent-content);
+  --color-sky: var(--color-info);
+  --color-sky-ink: var(--color-info-content);
+  --color-blush: var(--color-error);
+  --color-blush-ink: var(--color-error-content);
+}
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
-
-/* Use the data attribute for dark mode  */
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+[data-phx-session], [data-phx-teleported-src] { display: contents; }
 
-/* Make LiveView wrapper divs transparent for layout */
-[data-phx-session], [data-phx-teleported-src] { display: contents }
-
-/* Typography */
-body {
-  font-family: 'Inter', system-ui, sans-serif;
+@font-face { font-family: "Lato"; font-weight: 400; font-display: swap; src: url("/fonts/lato-regular.ttf") format("truetype"); }
+@font-face { font-family: "Lato"; font-weight: 700; font-display: swap; src: url("/fonts/lato-bold.ttf") format("truetype"); }
+@font-face { font-family: "Raleway"; font-weight: 500; font-display: swap; src: url("/fonts/raleway-medium.ttf") format("truetype"); }
+@font-face { font-family: "Raleway"; font-weight: 600; font-display: swap; src: url("/fonts/raleway-semibold.ttf") format("truetype"); }
+@layer base {
+  body { font-family: var(--font-body); }
+  h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 600; letter-spacing: -0.02em; }
+  button, a, input, select { touch-action: manipulation; }
+  button, [role="button"] { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; }
 }
-h1, h2, h3, h4 {
-  font-family: 'Lora', Georgia, serif;
+@layer components {
+  .surface { background: var(--color-base-200); border: 1px solid var(--color-base-300); border-radius: 20px; }
+  .eyebrow { color: var(--ink-muted); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .action { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--color-base-200); color: var(--color-base-content); font-size: 14px; font-weight: 700; transition: background-color .15s, border-color .15s, transform .15s; }
+  .action:hover { background: var(--tag); }
+  .action:active { transform: translateY(1px); }
+  .action-primary { border-color: transparent; background: var(--color-primary); color: var(--color-primary-content); }
+  .action-primary:hover { background: var(--primary-hover); }
+  .action:disabled { opacity: .45; }
+  .field { width: 100%; min-height: 44px; padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--color-base-200); color: var(--color-base-content); font-size: 16px; }
 }
-
-/* This file is for your main application CSS */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+}

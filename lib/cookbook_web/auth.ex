@@ -27,7 +27,10 @@ defmodule CookbookWeb.Auth do
           user ->
             socket =
               socket
-              |> assign(current_user: user)
+              |> assign(
+                current_user: user,
+                navigation: Cookbook.Planner.navigation_summary(user.id)
+              )
               |> attach_hook(:set_nav_path, :handle_params, fn _params, uri, socket ->
                 {:cont, assign(socket, :nav_path, URI.parse(uri).path)}
               end)
