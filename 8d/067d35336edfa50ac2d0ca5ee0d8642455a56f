@@ -1,0 +1,36 @@
+assets/css/app.css
+  h_2620cc60cfd1e9 6,9-10,12-35,39,43-44,46-69,73,77-125,130,132-142,144-156
+assets/js/app.js
+  h_2620cc60cfd1e9 28-32
+config/test.exs
+  h_2620cc60cfd1e9 33-35
+lib/cookbook/planner.ex
+  h_2620cc60cfd1e9 34-56
+lib/cookbook_web/auth.ex
+  h_2620cc60cfd1e9 30-33
+lib/cookbook_web/components/layouts.ex
+  h_2620cc60cfd1e9 5-7,9-17,20-37,39,41-43,45-51,53-55,57-61,64-71,73-90,92-94,96,98-105,107-109,111,114-125,132-135,137-150,155-156
+lib/cookbook_web/components/layouts/root.html.heex
+  h_2620cc60cfd1e9 11
+lib/cookbook_web/live/settings_live.ex
+  h_2620cc60cfd1e9 1-46
+lib/cookbook_web/router.ex
+  h_2620cc60cfd1e9 48
+priv/static/fonts/Lato-OFL.txt
+  h_2620cc60cfd1e9 1-93
+priv/static/fonts/Raleway-OFL.txt
+  h_2620cc60cfd1e9 1-93
+test/cookbook_web/live/layout_test.exs
+  h_2620cc60cfd1e9 1-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d067d35336edfa50ac2d0ca5ee0d8642455a56f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
