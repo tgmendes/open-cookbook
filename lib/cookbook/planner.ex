@@ -47,7 +47,7 @@ defmodule Cookbook.Planner do
 
       %{
         tonight: tonight && tonight.recipe,
-        shopping_count: length(generate_shopping_list(plan.id))
+        shopping_count: Enum.count(shopping_items(plan), &(&1.id not in plan.shopping_checked))
       }
     else
       %{tonight: nil, shopping_count: 0}
@@ -137,19 +137,53 @@ defmodule Cookbook.Planner do
       |> Repo.all()
 
     entries
-    |> Enum.flat_map(fn entry -> entry.recipe.ingredients end)
-    |> Enum.group_by(fn ing -> {String.downcase(ing.name), ing.unit || ""} end)
-    |> Enum.map(fn {{name, unit}, ingredients} ->
+    |> Enum.flat_map(fn entry ->
+      Enum.map(entry.recipe.ingredients, &{&1, entry.recipe.title})
+    end)
+    |> Enum.group_by(fn {ing, _title} -> {String.downcase(ing.name), ing.unit || ""} end)
+    |> Enum.map(fn {{name, unit}, sources} ->
+      ingredients = Enum.map(sources, &elem(&1, 0))
       total_quantity = merge_quantities(ingredients)
 
       %{
+        id: Base.url_encode64(name <> "\0" <> unit, padding: false),
         name: name,
         quantity: total_quantity,
         unit: unit,
-        checked: false
+        checked: false,
+        recipes: sources |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Enum.sort()
       }
     end)
     |> Enum.sort_by(& &1.name)
+  end
+
+  def shopping_items(plan) do
+    extras =
+      Enum.map(plan.shopping_extras, fn name ->
+        %{
+          id: "extra-" <> Base.url_encode64(name, padding: false),
+          name: name,
+          quantity: "",
+          unit: "",
+          recipes: [],
+          checked: false
+        }
+      end)
+
+    generate_shopping_list(plan.id) ++ extras
+  end
+
+  def update_shopping_state(plan, attrs) do
+    plan
+    |> Ecto.Changeset.cast(attrs, [:shopping_checked, :shopping_extras])
+    |> Repo.update()
+  end
+
+  def week_from_param(value) do
+    case Date.from_iso8601(value || "") do
+      {:ok, date} -> normalize_to_monday(date)
+      _ -> normalize_to_monday(Date.utc_today())
+    end
   end
 
   @doc """

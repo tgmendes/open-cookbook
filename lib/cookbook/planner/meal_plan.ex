@@ -7,6 +7,8 @@ defmodule Cookbook.Planner.MealPlan do
   schema "meal_plans" do
     field :week_start, :date
     field :notes, :string
+    field :shopping_checked, {:array, :string}, default: []
+    field :shopping_extras, {:array, :string}, default: []
 
     belongs_to :user, Cookbook.Accounts.User
     has_many :entries, Cookbook.Planner.MealPlanEntry, on_delete: :delete_all

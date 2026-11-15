@@ -1,113 +1,228 @@
 defmodule CookbookWeb.ShoppingListLive do
   use CookbookWeb, :live_view
-
   alias Cookbook.Planner
+  alias Cookbook.Planner.ShoppingSections
 
   def mount(params, _session, socket) do
-    week_start =
-      case params["week"] do
-        nil -> Planner.normalize_to_monday(Date.utc_today())
-        date_str -> Date.from_iso8601!(date_str) |> Planner.normalize_to_monday()
-      end
-
+    week_start = Planner.week_from_param(params["week"])
     {:ok, plan} = Planner.get_or_create_plan_for_week(socket.assigns.current_user.id, week_start)
-    shopping_list = Planner.generate_shopping_list(plan.id)
 
     {:ok,
-     assign(socket,
-       week_start: week_start,
+     socket
+     |> assign(
        plan: plan,
-       shopping_list: shopping_list,
-       checked: MapSet.new(),
-       page_title: "Shopping List"
-     )}
+       week_start: week_start,
+       grouping: "aisle",
+       page_title: "Shopping list",
+       extra_form: to_form(%{"name" => ""}, as: :extra)
+     )
+     |> refresh(), layout: false}
   end
 
-  def handle_event("toggle_item", %{"name" => name}, socket) do
-    checked =
-      if MapSet.member?(socket.assigns.checked, name) do
-        MapSet.delete(socket.assigns.checked, name)
+  def handle_event("toggle_item", %{"id" => id}, socket) do
+    if Enum.any?(Planner.shopping_items(socket.assigns.plan), &(&1.id == id)) do
+      checked = socket.assigns.plan.shopping_checked
+      checked = if id in checked, do: List.delete(checked, id), else: [id | checked]
+      save(socket, %{shopping_checked: checked})
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("add_extra", %{"extra" => %{"name" => name}}, socket) do
+    name = String.trim(name)
+    extras = socket.assigns.plan.shopping_extras
+
+    if name != "" && String.length(name) <= 150 && length(extras) < 200 do
+      save(socket, %{shopping_extras: Enum.uniq(extras ++ [name])})
+    else
+      {:noreply,
+       put_flash(socket, :error, "Enter an item up to 150 characters (maximum 200 extras).")}
+    end
+  end
+
+  def handle_event("group", %{"by" => by}, socket) when by in ["aisle", "recipe"] do
+    {:noreply, socket |> assign(grouping: by) |> refresh()}
+  end
+
+  defp save(socket, attrs) do
+    case Planner.update_shopping_state(socket.assigns.plan, attrs) do
+      {:ok, plan} ->
+        {:noreply,
+         socket
+         |> assign(plan: plan, extra_form: to_form(%{"name" => ""}, as: :extra))
+         |> refresh()}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Couldn't save your shopping list. Try again.")}
+    end
+  end
+
+  defp refresh(socket) do
+    plan = socket.assigns.plan
+    items = Planner.shopping_items(plan)
+    {basket, remaining} = Enum.split_with(items, &(&1.id in plan.shopping_checked))
+
+    groups =
+      if socket.assigns.grouping == "aisle" do
+        grouped = Enum.group_by(remaining, &ShoppingSections.section(&1.name))
+
+        for section <- ShoppingSections.order(),
+            list = Map.get(grouped, section, []),
+            list != [],
+            do: %{id: section, name: section, items: list, tone: ShoppingSections.tone(section)}
       else
-        MapSet.put(socket.assigns.checked, name)
+        remaining
+        |> Enum.flat_map(fn item ->
+          Enum.map(if(item.recipes == [], do: ["Extra items"], else: item.recipes), &{&1, item})
+        end)
+        |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+        |> Enum.sort_by(&elem(&1, 0))
+        |> Enum.map(fn {name, list} ->
+          %{id: name, name: name, items: list, tone: "bg-sky text-sky-ink"}
+        end)
       end
 
-    {:noreply, assign(socket, checked: checked)}
-  end
+    navigation = Planner.navigation_summary(socket.assigns.current_user.id)
 
-  defp checked_count(shopping_list, checked) do
-    Enum.count(shopping_list, fn item -> MapSet.member?(checked, item.name) end)
+    socket
+    |> assign(
+      total_count: length(items),
+      basket_count: length(basket),
+      remaining_count: length(remaining),
+      navigation: navigation,
+      empty?: items == []
+    )
+    |> stream(:groups, groups, reset: true)
+    |> stream(:basket, basket, reset: true)
   end
 
   def render(assigns) do
     ~H"""
-    <div class="max-w-lg mx-auto">
-      <.header>
-        Shopping List
-        <:subtitle>Week of {Calendar.strftime(@week_start, "%B %d, %Y")}</:subtitle>
-        <:actions>
-          <.button navigate={~p"/planner?week=#{Date.to_iso8601(@week_start)}"}>
-            <.icon name="hero-arrow-left" class="size-4 mr-1" /> Back to Planner
-          </.button>
-        </:actions>
-      </.header>
-
-      <div :if={@shopping_list == []} class="mt-16 text-center">
-        <div class="flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto mb-4">
-          <.icon name="hero-shopping-cart" class="size-8 text-primary" />
-        </div>
-        <p class="text-base-content/60 text-lg">No meals planned yet</p>
-        <p class="text-base-content/40 text-sm mt-1">Add some recipes to your meal plan first</p>
-        <.button navigate={~p"/planner?week=#{Date.to_iso8601(@week_start)}"} variant="primary" class="btn btn-primary mt-4">
-          Go to Planner
-        </.button>
-      </div>
-
-      <div :if={@shopping_list != []} class="mt-6">
-        <%!-- Progress bar --%>
-        <div class="flex items-center gap-3 mb-4">
-          <div class="flex-1 h-2 rounded-full bg-base-300/50 overflow-hidden">
-            <div
-              class="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-300"
-              style={"width: #{if @shopping_list == [], do: 0, else: checked_count(@shopping_list, @checked) / length(@shopping_list) * 100}%"}
+    <Layouts.app {assigns}>
+      <div class="mx-auto max-w-xl space-y-5">
+        <header class="space-y-4">
+          <div class="flex items-center justify-between">
+            <.link
+              navigate={~p"/planner?week=#{Date.to_iso8601(@week_start)}"}
+              aria-label="Back to meal plan"
+              class="flex size-11 items-center justify-center rounded-xl hover:bg-base-200"
+            >
+              <.icon name="hero-chevron-left" class="size-6" />
+            </.link><span class="text-sm text-muted">{Calendar.strftime(@week_start, "%b %-d")} – {Calendar.strftime(Date.add(@week_start, 6), "%b %-d")}</span>
+          </div>
+          <div>
+            <h1 class="text-3xl sm:text-4xl">Shopping list</h1>
+            <p class="mt-1 text-sm text-muted">For your week · {length(@plan.entries)} meals</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <progress
+              id="shopping-progress"
+              class="h-2 flex-1 overflow-hidden rounded-full [&::-webkit-progress-bar]:bg-base-300 [&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
+              max={max(@total_count, 1)}
+              value={@basket_count}
+              aria-label="Shopping progress"
+            >
+            </progress><span class="text-sm font-bold tabular-nums">{@basket_count}/{@total_count}</span>
+          </div>
+          <div role="tablist" aria-label="Group by" class="flex rounded-xl bg-base-300/50 p-1">
+            <button
+              id="group-by-aisle"
+              role="tab"
+              aria-selected={to_string(@grouping == "aisle")}
+              phx-click="group"
+              phx-value-by="aisle"
+              class={[
+                "min-h-11 flex-1 rounded-lg text-sm font-bold",
+                @grouping == "aisle" && "bg-base-200 shadow-sm"
+              ]}
+            >
+              By aisle
+            </button>
+            <button
+              id="group-by-recipe"
+              role="tab"
+              aria-selected={to_string(@grouping == "recipe")}
+              phx-click="group"
+              phx-value-by="recipe"
+              class={[
+                "min-h-11 flex-1 rounded-lg text-sm font-bold",
+                @grouping == "recipe" && "bg-base-200 shadow-sm"
+              ]}
+            >
+              By recipe
+            </button>
+          </div>
+        </header>
+        <.form
+          for={@extra_form}
+          id="extra-item-form"
+          phx-submit="add_extra"
+          class="flex items-start gap-2"
+        >
+          <div class="min-w-0 flex-1">
+            <.input
+              field={@extra_form[:name]}
+              aria-label="Add an item"
+              placeholder="Add something else (e.g. coffee)"
+              maxlength="150"
+              class="field !border-dashed"
             />
           </div>
-          <span class="text-sm text-base-content/50 tabular-nums">
-            {checked_count(@shopping_list, @checked)}/{length(@shopping_list)}
-          </span>
+          <button type="submit" class="action size-12 !p-0" aria-label="Add item">
+            <.icon name="hero-plus" class="size-5" />
+          </button>
+        </.form>
+        <div :if={@empty?} id="shopping-empty" class="surface space-y-3 p-7 text-center">
+          <h2 class="text-xl">A fresh list</h2>
+          <p class="text-sm text-muted">Plan some meals to fill your list, or add extras above.</p>
+          <.link navigate={~p"/planner?week=#{Date.to_iso8601(@week_start)}"} class="action">
+            Plan your meals
+          </.link>
         </div>
-
-        <ul class="space-y-2">
-          <li
-            :for={item <- @shopping_list}
-            class={[
-              "flex items-center gap-3 p-3.5 rounded-xl border bg-base-200 cursor-pointer transition-all",
-              MapSet.member?(@checked, item.name) && "border-base-300/30 opacity-50" || "border-base-300/50 hover:border-primary/30"
-            ]}
-            phx-click="toggle_item"
-            phx-value-name={item.name}
+        <div id="shopping-groups" phx-update="stream" class="space-y-4">
+          <section
+            :for={{id, group} <- @streams.groups}
+            id={id}
+            class="surface overflow-hidden !rounded-[18px]"
           >
-            <div class={[
-              "flex items-center justify-center w-5 h-5 rounded-md border-2 shrink-0 transition-colors",
-              MapSet.member?(@checked, item.name) && "bg-primary border-primary" || "border-base-300"
-            ]}>
-              <.icon :if={MapSet.member?(@checked, item.name)} name="hero-check" class="size-3 text-white" />
+            <div class={["flex items-center justify-between px-3.5 py-2.5", group.tone]}>
+              <h2 class="text-[15px]">{group.name}</h2>
+              <span class="text-xs font-bold">{length(group.items)} to get</span>
             </div>
-            <div class="flex-1 min-w-0">
-              <span class={[
-                "font-medium",
-                MapSet.member?(@checked, item.name) && "line-through text-base-content/40"
-              ]}>
-                {item.name}
-              </span>
-            </div>
-            <div class="text-sm text-base-content/50 shrink-0">
-              <span :if={item.quantity != ""}>{item.quantity}</span>
-              <span :if={item.unit != ""} class="ml-0.5">{item.unit}</span>
-            </div>
-          </li>
-        </ul>
+            <button
+              :for={item <- group.items}
+              id={"#{id}-#{item.id}"}
+              role="checkbox"
+              aria-checked="false"
+              phx-click="toggle_item"
+              phx-value-id={item.id}
+              class="flex min-h-15 w-full items-center gap-3.5 border-t border-base-300 px-3.5 py-2 text-left transition-colors hover:bg-tag"
+            >
+              <span class="size-[26px] shrink-0 rounded-lg border-2 border-checkbox"></span><span class="min-w-0 flex-1"><span class="block font-bold">{item.name}</span><span class="block text-xs text-muted">{if item.recipes == [], do: "Extra item", else: "For " <> Enum.join(item.recipes, ", ")}</span></span><span class="text-right text-sm text-secondary-ink">{item.quantity} {item.unit}</span>
+            </button>
+          </section>
+        </div>
+        <section aria-label="In the basket" class="space-y-2">
+          <h2 class="eyebrow">In the basket · {@basket_count}</h2>
+          <div id="basket" phx-update="stream">
+            <button
+              :for={{id, item} <- @streams.basket}
+              id={id}
+              role="checkbox"
+              aria-checked="true"
+              phx-click="toggle_item"
+              phx-value-id={item.id}
+              class="flex min-h-11 w-full items-center gap-3.5 rounded-xl px-2.5 py-1 text-left text-muted hover:bg-base-200"
+            >
+              <span class="flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-primary text-primary-content">
+                <.icon name="hero-check" class="size-4" />
+              </span><span class="flex-1 line-through">{item.name}</span><span class="text-sm">{item.quantity} {item.unit}</span>
+            </button>
+          </div>
+        </section>
       </div>
-    </div>
+    </Layouts.app>
     """
   end
 end
