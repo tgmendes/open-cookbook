@@ -6,6 +6,7 @@ defmodule Cookbook.Recipes.Step do
   @foreign_key_type :binary_id
   schema "steps" do
     field :instruction, :string
+    field :short_title, :string
     field :position, :integer, default: 0
     field :duration_minutes, :integer
 
@@ -14,7 +15,14 @@ defmodule Cookbook.Recipes.Step do
 
   def changeset(step, attrs) do
     step
-    |> cast(attrs, [:instruction, :position, :duration_minutes])
+    |> cast(attrs, [:instruction, :short_title, :position, :duration_minutes])
     |> validate_required([:instruction])
+  end
+
+  def title(step) do
+    case step.short_title do
+      title when is_binary(title) and title != "" -> title
+      _ -> step.instruction |> String.split() |> Enum.take(6) |> Enum.join(" ")
+    end
   end
 end

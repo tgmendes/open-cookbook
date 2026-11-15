@@ -14,7 +14,11 @@ defmodule Cookbook.AI do
     with {:ok, html} <- fetch_url(url),
          # Truncate to avoid exceeding token limits
          truncated = String.slice(html, 0, 100_000),
-         {:ok, data} <- Client.chat_json(Prompts.scrape_recipe(unit_system), "Extract the recipe from this HTML:\n\n#{truncated}") do
+         {:ok, data} <-
+           Client.chat_json(
+             Prompts.scrape_recipe(unit_system),
+             "Extract the recipe from this HTML:\n\n#{truncated}"
+           ) do
       {:ok, normalize_recipe_attrs(data, %{"source_url" => url, "source_type" => "scraped"})}
     end
   end
@@ -85,7 +89,10 @@ defmodule Cookbook.AI do
 
     case Client.chat_json(Prompts.refine_recipe(unit_system), prompt) do
       {:ok, data} ->
-        {:ok, normalize_recipe_attrs(data, %{"source_type" => current_attrs["source_type"] || "generated"})}
+        {:ok,
+         normalize_recipe_attrs(data, %{
+           "source_type" => current_attrs["source_type"] || "generated"
+         })}
 
       error ->
         error
@@ -193,6 +200,7 @@ defmodule Cookbook.AI do
       |> Enum.map(fn {step, idx} ->
         %{
           "instruction" => step["instruction"] || "",
+          "short_title" => step["short_title"],
           "position" => to_string(step["position"] || idx),
           "duration_minutes" => to_string(step["duration_minutes"] || "")
         }
@@ -206,8 +214,13 @@ defmodule Cookbook.AI do
         "prep_time_minutes" => data["prep_time_minutes"],
         "cook_time_minutes" => data["cook_time_minutes"],
         "tags" => data["tags"] || [],
-        "ingredients" => ingredients |> Enum.with_index() |> Enum.map(fn {v, i} -> {to_string(i), v} end) |> Map.new(),
-        "steps" => steps |> Enum.with_index() |> Enum.map(fn {v, i} -> {to_string(i), v} end) |> Map.new()
+        "ingredients" =>
+          ingredients
+          |> Enum.with_index()
+          |> Enum.map(fn {v, i} -> {to_string(i), v} end)
+          |> Map.new(),
+        "steps" =>
+          steps |> Enum.with_index() |> Enum.map(fn {v, i} -> {to_string(i), v} end) |> Map.new()
       },
       extra
     )

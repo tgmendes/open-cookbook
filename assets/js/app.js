@@ -24,6 +24,7 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/cookbook"
 import topbar from "../vendor/topbar"
+import {CookTimers} from "./cook_timers.mjs"
 
 try {
   const theme = localStorage.getItem("cookbook-theme")
@@ -69,7 +70,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, ScrollToBottom, ScreenWakeLock},
+  hooks: {...colocatedHooks, ScrollToBottom, ScreenWakeLock, CookTimers},
 })
 
 // Theme toggle — dispatched by the sun/moon button in the sidebar

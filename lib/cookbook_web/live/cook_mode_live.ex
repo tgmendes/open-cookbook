@@ -1,438 +1,471 @@
 defmodule CookbookWeb.CookModeLive do
   use CookbookWeb, :live_view
-
   alias Cookbook.{AI, Recipes}
+  alias Cookbook.Recipes.Step
 
   def mount(%{"id" => id}, _session, socket) do
     recipe = Recipes.get_recipe!(id)
 
-    if recipe.steps == [] do
-      {:ok,
-       socket
-       |> put_flash(:error, "This recipe has no steps to cook.")
-       |> push_navigate(to: ~p"/recipes/#{recipe.id}")}
-    else
-      steps = Enum.sort_by(recipe.steps, & &1.position)
+    cond do
+      recipe.user_id != socket.assigns.current_user.id ->
+        {:ok, push_navigate(socket, to: ~p"/recipes")}
 
-      {:ok,
-       assign(socket,
-         recipe: recipe,
-         steps: steps,
-         current_step: 0,
-         total_steps: length(steps),
-         show_ingredients: false,
-         adjusted_ingredients: nil,
-         adjusted_servings: nil,
-         adjust_open: false,
-         adjust_loading: false,
-         adjust_error: nil,
-         page_title: "Cook: #{recipe.title}"
-       )}
+      recipe.steps == [] ->
+        {:ok,
+         socket
+         |> put_flash(:error, "This recipe has no steps to cook.")
+         |> push_navigate(to: ~p"/recipes/#{recipe.id}")}
+
+      true ->
+        {:ok,
+         assign(socket,
+           recipe: recipe,
+           steps: Enum.sort_by(recipe.steps, & &1.position),
+           current_step: -1,
+           gathered: MapSet.new(),
+           show_ingredients: false,
+           adjusted_ingredients: nil,
+           adjusted_servings: nil,
+           requested_servings: recipe.servings || 2,
+           adjust_loading: false,
+           adjust_error: nil,
+           page_title: "Cook: #{recipe.title}"
+         ), layout: false}
     end
   end
 
-  def handle_event("next", _params, socket) do
-    %{current_step: current, total_steps: total} = socket.assigns
-    {:noreply, assign(socket, current_step: min(current + 1, total - 1))}
-  end
+  def handle_event("start", _, socket), do: {:noreply, assign(socket, current_step: 0)}
+  def handle_event("next", _, socket), do: {:noreply, move(socket, 1)}
+  def handle_event("prev", _, socket), do: {:noreply, move(socket, -1)}
+  def handle_event("keydown", %{"key" => "ArrowRight"}, socket), do: {:noreply, move(socket, 1)}
+  def handle_event("keydown", %{"key" => "ArrowLeft"}, socket), do: {:noreply, move(socket, -1)}
 
-  def handle_event("prev", _params, socket) do
-    %{current_step: current} = socket.assigns
-    {:noreply, assign(socket, current_step: max(current - 1, 0))}
-  end
+  def handle_event("keydown", %{"key" => "Escape"}, socket),
+    do: {:noreply, assign(socket, current_step: -1)}
 
-  def handle_event("toggle-ingredients", _params, socket) do
-    {:noreply, assign(socket, show_ingredients: !socket.assigns.show_ingredients)}
-  end
+  def handle_event("keydown", _, socket), do: {:noreply, socket}
 
-  def handle_event("go-to-step", %{"step" => step}, socket) do
-    step = String.to_integer(step)
-    step = max(0, min(step, socket.assigns.total_steps - 1))
-    {:noreply, assign(socket, current_step: step)}
-  end
+  def handle_event("toggle-ingredients", _, socket),
+    do: {:noreply, assign(socket, show_ingredients: !socket.assigns.show_ingredients)}
 
-  def handle_event("open_adjust", _params, socket) do
-    {:noreply, assign(socket, adjust_open: true, adjust_error: nil)}
-  end
-
-  def handle_event("close_adjust", _params, socket) do
-    {:noreply, assign(socket, adjust_open: false, adjust_error: nil)}
-  end
-
-  def handle_event("reset_adjust", _params, socket) do
-    {:noreply, assign(socket, adjusted_ingredients: nil, adjusted_servings: nil)}
-  end
-
-  def handle_event("adjust_quantities", %{"servings" => servings_str}, socket) do
-    case Integer.parse(String.trim(servings_str)) do
-      {servings, ""} when servings > 0 ->
-        socket = assign(socket, adjust_loading: true, adjust_error: nil)
-        self_pid = self()
-        recipe = socket.assigns.recipe
-        unit_system = socket.assigns.current_user.unit_system
-
-        Task.start(fn ->
-          result = AI.adjust_quantities(recipe, servings, unit_system)
-          send(self_pid, {:adjust_result, result})
-        end)
-
-        {:noreply, socket}
+  def handle_event("go-to-step", %{"step" => value}, socket) do
+    case Integer.parse(value) do
+      {index, ""} when index >= 0 ->
+        {:noreply, assign(socket, current_step: min(index, length(socket.assigns.steps) - 1))}
 
       _ ->
-        {:noreply, assign(socket, adjust_error: "Please enter a valid number of servings.")}
+        {:noreply, socket}
     end
   end
 
-  def handle_info({:adjust_result, {:ok, %{ingredients: ingredients, servings: servings}}}, socket) do
+  def handle_event("gather", %{"index" => index}, socket) do
+    gathered = socket.assigns.gathered
+
+    gathered =
+      if MapSet.member?(gathered, index),
+        do: MapSet.delete(gathered, index),
+        else: MapSet.put(gathered, index)
+
+    {:noreply, assign(socket, gathered: gathered)}
+  end
+
+  def handle_event("servings", %{"direction" => direction}, socket) do
+    if socket.assigns.adjust_loading do
+      {:noreply, socket}
+    else
+      delta = if direction == "more", do: 1, else: -1
+      servings = (socket.assigns.requested_servings + delta) |> max(1) |> min(12)
+      recipe = socket.assigns.recipe
+      unit_system = socket.assigns.current_user.unit_system
+
+      {:noreply,
+       socket
+       |> assign(requested_servings: servings, adjust_loading: true, adjust_error: nil)
+       |> start_async(:adjust_quantities, fn ->
+         AI.adjust_quantities(recipe, servings, unit_system)
+       end)}
+    end
+  end
+
+  def handle_async(
+        :adjust_quantities,
+        {:ok, {:ok, %{ingredients: ingredients, servings: servings}}},
+        socket
+      ) do
     {:noreply,
      assign(socket,
-       adjust_loading: false,
-       adjust_open: false,
        adjusted_ingredients: ingredients,
-       adjusted_servings: servings
+       adjusted_servings: servings,
+       requested_servings: servings,
+       adjust_loading: false,
+       gathered: MapSet.new()
      )}
   end
 
-  def handle_info({:adjust_result, {:error, _reason}}, socket) do
+  def handle_async(:adjust_quantities, _, socket) do
     {:noreply,
      assign(socket,
        adjust_loading: false,
-       adjust_error: "Failed to adjust quantities. Please try again."
+       requested_servings:
+         socket.assigns.adjusted_servings || socket.assigns.recipe.servings || 2,
+       adjust_error: "Couldn't adjust quantities. Your original amounts are unchanged. Try again."
      )}
   end
 
-  def handle_event("keydown", %{"key" => "ArrowRight"}, socket) do
-    %{current_step: current, total_steps: total} = socket.assigns
-    {:noreply, assign(socket, current_step: min(current + 1, total - 1))}
-  end
+  defp move(socket, delta),
+    do:
+      assign(socket,
+        current_step:
+          max(-1, min(socket.assigns.current_step + delta, length(socket.assigns.steps)))
+      )
 
-  def handle_event("keydown", %{"key" => "ArrowLeft"}, socket) do
-    %{current_step: current} = socket.assigns
-    {:noreply, assign(socket, current_step: max(current - 1, 0))}
-  end
-
-  def handle_event("keydown", %{"key" => "Escape"}, socket) do
-    {:noreply, push_navigate(socket, to: ~p"/recipes/#{socket.assigns.recipe.id}")}
-  end
-
-  def handle_event("keydown", _params, socket) do
-    {:noreply, socket}
-  end
-
-  # Common culinary modifiers that shouldn't match on their own
-  @modifier_words ~w(plain fresh dried whole ground fine extra large small medium
-                     good quality ripe chopped sliced diced minced grated crushed
-                     peeled canned frozen boneless skinless unsalted salted sweet
-                     mild strong light dark soft firm thick thin lean)
-
+  @modifiers ~w(plain fresh dried whole ground fine extra large small medium chopped sliced diced minced grated crushed peeled canned frozen)
   defp matched_ingredients(step, ingredients) do
-    Enum.filter(ingredients, fn ingredient ->
-      full_pattern = ~r/\b#{Regex.escape(ingredient.name)}\b/i
-
-      Regex.match?(full_pattern, step.instruction) or
-        ingredient.name
+    Enum.filter(ingredients, fn ing ->
+      words =
+        ing.name
         |> String.split()
-        |> Enum.reject(fn word ->
-          String.length(word) < 4 or String.downcase(word) in @modifier_words
-        end)
-        |> Enum.any?(fn word ->
-          Regex.match?(~r/\b#{Regex.escape(word)}\b/i, step.instruction)
-        end)
+        |> Enum.reject(&(String.length(&1) < 4 || String.downcase(&1) in @modifiers))
+
+      Regex.match?(~r/\b#{Regex.escape(ing.name)}\b/i, step.instruction) ||
+        Enum.any?(words, &Regex.match?(~r/\b#{Regex.escape(&1)}\b/i, step.instruction))
     end)
   end
 
+  defp lane_class(index),
+    do: Enum.at(["bg-lavender", "bg-butter", "bg-peach", "bg-sage", "bg-sky"], rem(index, 5))
+
   def render(assigns) do
-    assigns = assign(assigns, :step, Enum.at(assigns.steps, assigns.current_step))
     ingredients = assigns.adjusted_ingredients || assigns.recipe.ingredients
-    assigns = assign(assigns, :step_ingredients, matched_ingredients(assigns.step, ingredients))
+    step = Enum.at(assigns.steps, max(assigns.current_step, 0))
+    next_step = Enum.at(assigns.steps, assigns.current_step + 1)
+
+    assigns =
+      assign(assigns,
+        ingredients: ingredients,
+        step: step,
+        next_step: next_step,
+        step_ingredients: if(step, do: matched_ingredients(step, ingredients), else: []),
+        total_minutes:
+          (assigns.recipe.prep_time_minutes || 0) + (assigns.recipe.cook_time_minutes || 0),
+        timeline_minutes: max(Enum.sum(Enum.map(assigns.steps, &(&1.duration_minutes || 1))), 1)
+      )
 
     ~H"""
-    <div
-      id="cook-mode"
-      phx-hook="ScreenWakeLock"
-      data-theme="dark"
-      class="fixed inset-0 z-50 flex bg-base-100"
-      phx-window-keydown="keydown"
-    >
-      <%!-- Desktop: step list sidebar --%>
-      <div class="hidden lg:flex lg:flex-col lg:w-72 bg-base-200 border-r border-base-300/30 shrink-0">
-        <%!-- Recipe header --%>
-        <div class="flex items-center gap-3 p-4 border-b border-base-300/30">
-          <div class="w-11 h-11 rounded-lg bg-base-300/50 overflow-hidden shrink-0">
+    <Layouts.app {assigns} immersive>
+      <div
+        id="cook-mode"
+        phx-hook="ScreenWakeLock"
+        phx-window-keydown="keydown"
+        class="min-h-dvh bg-base-100"
+      >
+        <section :if={@current_step == -1} id="cook-prep" class="mx-auto max-w-3xl pb-32">
+          <div class="relative flex h-44 items-center justify-center overflow-hidden bg-peach sm:h-60">
             <img
               :if={@recipe.image_url}
               src={@recipe.image_url}
-              alt={@recipe.title}
-              class="w-full h-full object-cover"
+              alt=""
+              class="size-full object-cover"
             />
-            <div :if={!@recipe.image_url} class="w-full h-full flex items-center justify-center">
-              <.icon name="hero-book-open" class="size-5 text-base-content/30" />
+            <div
+              :if={!@recipe.image_url}
+              class="flex size-28 items-center justify-center rounded-full border-[14px] border-base-100 bg-base-200 shadow-sm"
+            >
+              <.icon name="hero-cake" class="size-10 text-peach-ink" />
             </div>
+            <.link
+              navigate={~p"/recipes/#{@recipe.id}"}
+              aria-label="Close cook mode"
+              class="action absolute top-4 left-4 size-11 !rounded-full !p-0"
+            >
+              <.icon name="hero-x-mark" class="size-5" />
+            </.link>
           </div>
-          <div class="min-w-0">
-            <p class="text-base-content/40 text-xs mb-0.5">Now cooking</p>
-            <h2 class="text-base-content font-semibold text-sm truncate">{@recipe.title}</h2>
-            <p class="text-base-content/40 text-xs mt-0.5">Step {@current_step + 1} of {@total_steps}</p>
+          <div class="space-y-6 p-5 sm:p-8">
+            <header class="space-y-1.5">
+              <p class="eyebrow">Before you start</p>
+              <h1 class="text-[26px] leading-tight sm:text-4xl">{@recipe.title}</h1>
+              <p class="text-sm text-muted">
+                <span :if={@total_minutes > 0}>{@total_minutes} min total · </span>{length(@steps)} steps
+              </p>
+            </header>
+            <div class="surface flex items-center justify-between gap-3 !rounded-2xl p-2.5 pl-4">
+              <span class="font-bold">Servings</span>
+              <div class="flex items-center gap-2">
+                <button
+                  id="fewer-servings"
+                  aria-label="Fewer servings"
+                  phx-click="servings"
+                  phx-value-direction="less"
+                  disabled={@adjust_loading || @requested_servings <= 1}
+                  class="action size-11 !p-0"
+                >
+                  <.icon name="hero-minus" class="size-5" />
+                </button>
+                <span
+                  id="servings"
+                  aria-live="polite"
+                  class="min-w-9 text-center font-heading text-xl font-semibold"
+                >
+                  {@requested_servings}
+                </span>
+                <button
+                  id="more-servings"
+                  aria-label="More servings"
+                  phx-click="servings"
+                  phx-value-direction="more"
+                  disabled={@adjust_loading || @requested_servings >= 12}
+                  class="action size-11 !p-0"
+                >
+                  <.icon name="hero-plus" class="size-5" />
+                </button>
+              </div>
+            </div>
+            <p :if={@adjust_loading} role="status" class="text-sm text-muted">
+              Adjusting quantities…
+            </p>
+            <p
+              :if={@adjust_error}
+              id="adjust-error"
+              role="alert"
+              class="rounded-xl bg-blush p-3 text-sm text-blush-ink"
+            >
+              {@adjust_error}
+            </p>
+            <section aria-label="How it comes together" class="space-y-3">
+              <h2 class="text-lg">How it comes together</h2>
+              <div class="surface space-y-3 p-4">
+                <div :for={{s, i} <- Enum.with_index(@steps)} class="space-y-1">
+                  <p class="text-xs text-secondary-ink">
+                    {Step.title(s)} <span :if={s.duration_minutes}>· {s.duration_minutes} min</span>
+                  </p>
+                  <div class="h-3 overflow-hidden rounded-full bg-tag">
+                    <div
+                      class={["h-full rounded-full", lane_class(i)]}
+                      style={"width: #{max(5, (s.duration_minutes || 1) / @timeline_minutes * 100)}%"}
+                    >
+                    </div>
+                  </div>
+                </div>
+                <p class="text-xs text-muted">A quick overview of the steps, in recipe order.</p>
+              </div>
+            </section>
+            <section aria-label="Gather ingredients" class="space-y-3">
+              <div class="flex items-baseline justify-between">
+                <h2 class="text-lg">Gather</h2>
+                <span class="text-sm text-muted">
+                  {MapSet.size(@gathered)} of {length(@ingredients)} ready
+                </span>
+              </div>
+              <div class="surface divide-y divide-base-300 overflow-hidden">
+                <button
+                  :for={{ing, i} <- Enum.with_index(@ingredients)}
+                  id={"gather-#{i}"}
+                  role="checkbox"
+                  aria-checked={to_string(MapSet.member?(@gathered, to_string(i)))}
+                  phx-click="gather"
+                  phx-value-index={i}
+                  class="flex min-h-[52px] w-full items-center gap-3 px-3.5 py-2 text-left hover:bg-tag"
+                >
+                  <span class={[
+                    "flex size-6 shrink-0 items-center justify-center rounded-lg border-2",
+                    if(MapSet.member?(@gathered, to_string(i)),
+                      do: "border-primary bg-primary text-primary-content",
+                      else: "border-checkbox"
+                    )
+                  ]}>
+                    <.icon
+                      :if={MapSet.member?(@gathered, to_string(i))}
+                      name="hero-check"
+                      class="size-4"
+                    />
+                  </span>
+                  <span class="min-w-16 font-bold">{ing.quantity} {ing.unit}</span><span class={[
+                    MapSet.member?(@gathered, to_string(i)) && "text-muted"
+                  ]}>{ing.name}</span>
+                </button>
+              </div>
+            </section>
           </div>
-        </div>
+          <footer class="fixed inset-x-0 bottom-0 z-10 border-t border-base-300 bg-base-200 px-5 py-4 pb-[max(20px,env(safe-area-inset-bottom))]">
+            <div class="mx-auto max-w-2xl space-y-2">
+              <button
+                id="start-cooking"
+                phx-click="start"
+                class="action action-primary min-h-14 w-full !text-base"
+              >
+                Start cooking <.icon name="hero-arrow-right" class="size-5" />
+              </button>
+              <p class="text-center text-xs text-muted">Your screen stays on while you cook.</p>
+            </div>
+          </footer>
+        </section>
 
-        <%!-- Step list --%>
-        <div class="flex-1 overflow-y-auto p-2">
-          <button
-            :for={{step, idx} <- Enum.with_index(@steps)}
-            phx-click="go-to-step"
-            phx-value-step={idx}
-            class={[
-              "w-full text-left flex gap-3 p-3 rounded-lg mb-0.5 transition-all duration-150",
-              if(idx == @current_step,
-                do: "bg-primary/15 text-base-content",
-                else: "hover:bg-base-300/30 text-base-content/50 hover:text-base-content/80"
-              )
-            ]}
-          >
-            <span class={[
-              "flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold shrink-0 mt-0.5",
-              if(idx == @current_step,
-                do: "bg-primary text-primary-content",
-                else: "bg-base-300/50 text-base-content/40"
-              )
-            ]}>
-              {idx + 1}
-            </span>
-            <p class="text-xs leading-relaxed line-clamp-3">{step.instruction}</p>
-          </button>
-        </div>
-
-        <%!-- All Ingredients button --%>
-        <div class="p-3 border-t border-base-300/30">
-          <button
-            phx-click="toggle-ingredients"
-            class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-base-300/30 hover:bg-base-300/60 text-base-content/60 hover:text-base-content text-sm transition-colors"
-          >
-            <.icon name="hero-clipboard-document-list" class="size-4" />
-            All Ingredients
-          </button>
-        </div>
-      </div>
-
-      <%!-- Main content area --%>
-      <div class="flex-1 flex flex-col min-w-0">
-        <%!-- Top bar --%>
-        <div class="flex items-center justify-between px-4 py-3 lg:px-6 shrink-0">
+        <header
+          :if={@current_step >= 0}
+          class="flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-200 px-5 py-4 lg:gap-5 lg:px-7"
+        >
           <.link
             navigate={~p"/recipes/#{@recipe.id}"}
-            class="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-base-300/30 transition-colors text-base-content/50 hover:text-base-content"
             aria-label="Exit cook mode"
+            class="action size-12 !p-0"
           >
             <.icon name="hero-x-mark" class="size-5" />
           </.link>
-
-          <h1 class="text-base-content/70 font-medium text-sm truncate px-4 lg:hidden">
-            {@recipe.title}
-          </h1>
-
-          <div class="flex items-center gap-1">
-            <span
-              :if={@adjusted_servings}
-              class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary mr-1"
-            >
-              <.icon name="hero-sparkles" class="size-3" />
-              {@adjusted_servings} servings
+          <div class="min-w-0 flex-1">
+            <h1 class="truncate text-base lg:text-lg">{@recipe.title}</h1>
+            <p class="text-sm text-muted">
+              {min(@current_step + 1, length(@steps))} of {length(@steps)} steps · {@adjusted_servings ||
+                @recipe.servings || 2} servings
+            </p>
+          </div>
+          <button id="all-ingredients" phx-click="toggle-ingredients" class="action !px-3">
+            <.icon name="hero-list-bullet" class="size-5" /><span class="hidden sm:inline">
+              All ingredients
             </span>
+          </button>
+          <nav aria-label="Steps" class="flex w-full gap-1.5 lg:order-none lg:w-auto lg:flex-1">
             <button
-              :if={@adjusted_servings}
-              phx-click="reset_adjust"
-              class="hidden sm:flex items-center px-2.5 py-1.5 rounded-lg hover:bg-base-300/30 text-base-content/40 hover:text-base-content/70 text-xs transition-colors"
-            >
-              Reset
-            </button>
-            <button
-              phx-click="open_adjust"
-              class="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-base-300/30 transition-colors text-base-content/50 hover:text-base-content"
-              aria-label="Adjust quantities"
-            >
-              <.icon name="hero-sparkles" class="size-5" />
-            </button>
-            <button
-              class="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg hover:bg-base-300/30 transition-colors text-base-content/50 hover:text-base-content"
-              phx-click="toggle-ingredients"
-              aria-label="All ingredients"
-            >
-              <.icon name="hero-clipboard-document-list" class="size-5" />
-            </button>
-          </div>
-        </div>
-
-        <%!-- Step content --%>
-        <div class="flex-1 flex flex-col items-center justify-center px-6 py-4 overflow-y-auto">
-          <p class="text-base-content/30 text-xs font-semibold tracking-widest uppercase mb-6">
-            Step {@current_step + 1} of {@total_steps}
-          </p>
-
-          <p class="text-base-content text-2xl sm:text-3xl lg:text-4xl font-bold leading-relaxed text-center max-w-2xl">
-            {@step.instruction}
-          </p>
-
-          <%!-- Ingredient chips --%>
-          <div :if={@step_ingredients != []} class="mt-8 flex flex-wrap justify-center gap-2">
-            <span
-              :for={ing <- @step_ingredients}
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-base-300/40 text-sm"
-            >
-              <span :if={ing.quantity && ing.quantity != ""} class="font-bold text-primary">{ing.quantity}</span>
-              <span :if={ing.unit && ing.unit != ""} class="text-base-content/50">{ing.unit}</span>
-              <span class="text-base-content/80">{ing.name}</span>
-            </span>
-          </div>
-
-          <%!-- Timer badge --%>
-          <div
-            :if={@step.duration_minutes}
-            class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-base-300/40 text-base-content/60 text-sm font-medium"
-          >
-            <.icon name="hero-clock" class="size-4" />
-            {@step.duration_minutes} min
-          </div>
-        </div>
-
-        <%!-- Bottom bar --%>
-        <div class="px-4 pb-5 pt-3 shrink-0">
-          <%!-- Progress dots --%>
-          <div class="flex items-center justify-center gap-1.5 mb-4">
-            <button
-              :for={i <- 0..(@total_steps - 1)}
+              :for={{s, i} <- Enum.with_index(@steps)}
+              id={"step-nav-#{i}"}
               phx-click="go-to-step"
               phx-value-step={i}
-              class={[
-                "rounded-full transition-all duration-200",
-                if(i == @current_step,
-                  do: "w-6 h-2 bg-primary",
-                  else: "w-2 h-2 bg-base-content/20 hover:bg-base-content/40"
+              aria-label={"Step #{i + 1}: #{Step.title(s)}"}
+              aria-current={@current_step == i && "step"}
+              class="flex min-h-11 flex-1 items-center"
+            >
+              <span class={[
+                "h-2 w-full rounded-full",
+                if(i <= @current_step, do: "bg-primary", else: "bg-base-300")
+              ]}>
+              </span>
+            </button>
+          </nav>
+        </header>
+        <div class={[
+          @current_step >= 0 &&
+            "mx-auto flex max-w-[1400px] flex-col lg:min-h-[calc(100dvh-100px)] lg:flex-row"
+        ]}>
+          <section
+            :if={@current_step >= 0 && @step}
+            id="cook-step"
+            data-step={@current_step}
+            class="flex min-w-0 flex-1 flex-col gap-7 px-5 py-8 lg:px-14 lg:py-11"
+          >
+            <h2 id="step-heading" class="eyebrow">Step {@current_step + 1} · {Step.title(@step)}</h2>
+            <p
+              aria-live="polite"
+              class="max-w-3xl font-heading text-[28px] leading-[1.32] font-medium lg:text-[38px]"
+            >
+              {@step.instruction}
+            </p>
+            <section :if={@step_ingredients != []} aria-label="For this step" class="space-y-2.5">
+              <h3 class="eyebrow">For this step</h3>
+              <div class="flex flex-wrap gap-2.5">
+                <span
+                  :for={ing <- @step_ingredients}
+                  class="surface !rounded-[14px] px-4 py-3 text-lg"
+                >
+                  <strong>{ing.quantity} {ing.unit}</strong> {ing.name}
+                </span>
+              </div>
+            </section>
+            <button
+              :if={@step.duration_minutes && @step.duration_minutes > 0}
+              id="start-timer"
+              class="action action-primary min-h-15 self-start !text-lg"
+              phx-click={
+                JS.dispatch("cook:start-timer",
+                  detail: %{
+                    id: @step.id,
+                    label: Step.title(@step),
+                    seconds: @step.duration_minutes * 60
+                  }
                 )
-              ]}
-              aria-label={"Go to step #{i + 1}"}
-            />
-          </div>
-
-          <%!-- Nav buttons --%>
-          <div class="flex gap-3 max-w-lg mx-auto">
-            <button
-              phx-click="prev"
-              disabled={@current_step == 0}
-              class="flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl bg-base-300/40 hover:bg-base-300/60 text-base-content font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
+              }
             >
-              <.icon name="hero-chevron-left" class="size-5" /> Previous
+              <.icon name="hero-clock" class="size-6" />Start {@step.duration_minutes}-min timer
             </button>
-            <button
-              phx-click="next"
-              disabled={@current_step == @total_steps - 1}
-              class="flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl bg-primary hover:bg-primary/90 text-primary-content font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
-            >
-              Next Step <.icon name="hero-chevron-right" class="size-5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <%!-- Ingredients drawer --%>
-      <div
-        :if={@show_ingredients}
-        class="fixed inset-0 z-60"
-        phx-click="toggle-ingredients"
-      >
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-        <div
-          data-theme="light"
-          class="absolute top-0 right-0 h-full w-80 max-w-[85vw] bg-base-100 shadow-2xl flex flex-col"
-          phx-click-away="toggle-ingredients"
-        >
-          <div class="flex items-center justify-between px-5 py-4 border-b border-base-300/50">
-            <div>
-              <h2 class="text-lg font-semibold text-base-content">Ingredients</h2>
-              <p :if={@adjusted_servings} class="text-xs text-primary mt-0.5 flex items-center gap-1">
-                <.icon name="hero-sparkles" class="size-3" />
-                Adjusted for {@adjusted_servings} servings
+            <div class="mt-auto flex gap-3 pt-8">
+              <button id="previous-step" phx-click="prev" class="action min-h-16 !px-4 sm:min-w-36">
+                <.icon name="hero-chevron-left" class="size-5" />Back
+              </button><button
+                id="next-step"
+                phx-click="next"
+                class="action action-primary min-h-16 min-w-0 flex-1 justify-between text-left"
+              ><span class="min-w-0"><span class="block text-xs">{if @next_step, do: "NEXT · STEP #{@current_step + 2}", else: "ALL DONE"}</span><span class="block truncate">{if @next_step, do: Step.title(@next_step), else: "Finish cooking"}</span></span><.icon
+                name="hero-arrow-right"
+                class="size-6 shrink-0"
+              /></button>
+            </div>
+            <p class="text-xs text-muted">Tip: use ← and → on a keyboard.</p>
+          </section>
+          <section
+            :if={@current_step == length(@steps)}
+            id="cook-finished"
+            class="flex-1 space-y-5 p-8 text-center lg:p-20"
+          >
+            <.icon name="hero-check-circle" class="size-16 text-primary" />
+            <h2 class="text-3xl">Enjoy your meal.</h2>
+            <p class="text-muted">
+              That's everything. Your timers stay here until you leave cook mode.
+            </p>
+            <.link navigate={~p"/recipes/#{@recipe.id}"} class="action action-primary">
+              Back to recipe
+            </.link>
+          </section>
+          <aside
+            class={[
+              @current_step == -1 && "hidden",
+              "space-y-4 border-t border-base-300 p-5 lg:w-80 lg:shrink-0 lg:border-t-0 lg:border-l lg:p-6"
+            ]}
+            aria-label="Timers"
+          >
+            <h2 class="text-lg">Timers</h2>
+            <div id="cook-timers" phx-hook="CookTimers" phx-update="ignore" class="space-y-3">
+              <p class="text-sm text-muted">
+                Timers you start show up here and keep running as you move between steps.
               </p>
             </div>
-            <button
-              phx-click="toggle-ingredients"
-              class="btn btn-ghost btn-sm btn-circle"
-              aria-label="Close ingredients"
-            >
-              <.icon name="hero-x-mark" class="size-5" />
-            </button>
-          </div>
-          <div class="flex-1 overflow-y-auto px-5 py-4">
-            <ul class="space-y-3">
-              <li
-                :for={ingredient <- @adjusted_ingredients || @recipe.ingredients}
-                class="flex items-baseline gap-3 text-base"
+            <div :if={@next_step && @current_step >= 0} class="rounded-2xl bg-sage p-4 text-sage-ink">
+              <h3 class="eyebrow !text-inherit">Coming up</h3>
+              <p class="mt-2 text-sm leading-relaxed">{@next_step.instruction}</p>
+            </div>
+          </aside>
+        </div>
+        <div
+          :if={@show_ingredients}
+          id="ingredients-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="All ingredients"
+          class="fixed inset-0 z-50"
+        >
+          <div class="absolute inset-0 bg-black/50" phx-click="toggle-ingredients"></div>
+          <section
+            class="absolute inset-y-0 right-0 w-80 max-w-[90vw] overflow-y-auto border-l border-base-300 bg-base-200 p-5"
+            phx-window-keydown="toggle-ingredients"
+            phx-key="Escape"
+          >
+            <div class="mb-5 flex items-center justify-between">
+              <h2 class="text-xl">All ingredients</h2>
+              <button
+                phx-click="toggle-ingredients"
+                aria-label="Close ingredients"
+                class="action size-11 !p-0"
               >
-                <span class="flex items-center gap-1 shrink-0">
-                  <span :if={ingredient.quantity && ingredient.quantity != ""} class="font-bold text-primary">{ingredient.quantity}</span>
-                  <span :if={ingredient.unit && ingredient.unit != ""} class="text-base-content/50 text-sm">{ingredient.unit}</span>
-                </span>
-                <span class="text-base-content">{ingredient.name}</span>
+                <.icon name="hero-x-mark" class="size-5" />
+              </button>
+            </div>
+            <ul class="divide-y divide-base-300">
+              <li :for={ing <- @ingredients} class="py-3">
+                <strong>{ing.quantity} {ing.unit}</strong> {ing.name}
               </li>
             </ul>
-          </div>
+          </section>
         </div>
       </div>
-
-      <%!-- Adjust quantities modal --%>
-      <div :if={@adjust_open} class="fixed inset-0 z-[70] flex items-center justify-center px-4">
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" phx-click="close_adjust" />
-        <div data-theme="light" class="relative w-full max-w-sm bg-base-100 rounded-2xl shadow-2xl p-6 space-y-5 z-10">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
-                <.icon name="hero-sparkles" class="size-4 text-primary" />
-              </div>
-              <h2 class="text-lg font-semibold text-base-content">Adjust quantities</h2>
-            </div>
-            <button phx-click="close_adjust" class="btn btn-ghost btn-sm btn-circle" aria-label="Close">
-              <.icon name="hero-x-mark" class="size-5" />
-            </button>
-          </div>
-
-          <p class="text-sm text-base-content/60">
-            This recipe makes <span class="font-medium text-base-content">{@recipe.servings || "?"} servings</span>.
-            Enter your desired serving count and AI will scale the ingredients.
-          </p>
-
-          <form phx-submit="adjust_quantities" class="space-y-4">
-            <div>
-              <label class="label mb-1 text-sm font-medium text-base-content">Target servings</label>
-              <input
-                type="number"
-                name="servings"
-                min="1"
-                value={@recipe.servings}
-                placeholder="e.g. 2"
-                class="input input-bordered w-full"
-                disabled={@adjust_loading}
-                autofocus
-              />
-            </div>
-
-            <div :if={@adjust_error} class="alert alert-error py-2 text-sm">
-              <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
-              {@adjust_error}
-            </div>
-
-            <button type="submit" class="btn btn-primary w-full" disabled={@adjust_loading}>
-              <%= if @adjust_loading do %>
-                <span class="loading loading-spinner loading-sm"></span>
-                Adjusting quantities...
-              <% else %>
-                <.icon name="hero-sparkles" class="size-4 mr-1" />
-                Adjust with AI
-              <% end %>
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
+    </Layouts.app>
     """
   end
 end

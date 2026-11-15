@@ -21,7 +21,7 @@ defmodule Cookbook.AI.Prompts do
         ...
       ],
       "steps": [
-        {"instruction": "Step description", "position": 0, "duration_minutes": null},
+        {"instruction": "Step description", "short_title": "Brief action title", "position": 0, "duration_minutes": null},
         ...
       ],
       "tags": ["tag1", "tag2"]
@@ -54,7 +54,7 @@ defmodule Cookbook.AI.Prompts do
         ...
       ],
       "steps": [
-        {"instruction": "Step description", "position": 0, "duration_minutes": 5},
+        {"instruction": "Step description", "short_title": "Brief action title", "position": 0, "duration_minutes": 5},
         ...
       ],
       "tags": ["tag1", "tag2"]
@@ -89,7 +89,7 @@ defmodule Cookbook.AI.Prompts do
         ...
       ],
       "steps": [
-        {"instruction": "Step description", "position": 0, "duration_minutes": null},
+        {"instruction": "Step description", "short_title": "Brief action title", "position": 0, "duration_minutes": null},
         ...
       ],
       "tags": ["tag1", "tag2"]
@@ -124,7 +124,7 @@ defmodule Cookbook.AI.Prompts do
         ...
       ],
       "steps": [
-        {"instruction": "Step description", "position": 0, "duration_minutes": 5},
+        {"instruction": "Step description", "short_title": "Brief action title", "position": 0, "duration_minutes": 5},
         ...
       ],
       "tags": ["tag1", "tag2"]
