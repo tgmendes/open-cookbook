@@ -29,8 +29,18 @@ defmodule Cookbook.Recipes do
     search_term = "%#{search}%"
 
     from r in query,
-      where: ilike(r.title, ^search_term) or
-             fragment("EXISTS (SELECT 1 FROM ingredients i WHERE i.recipe_id = ? AND i.name ILIKE ?)", r.id, ^search_term)
+      where:
+        ilike(r.title, ^search_term) or
+          fragment(
+            "EXISTS (SELECT 1 FROM unnest(?) AS tag WHERE tag ILIKE ?)",
+            r.tags,
+            ^search_term
+          ) or
+          fragment(
+            "EXISTS (SELECT 1 FROM ingredients i WHERE i.recipe_id = ? AND i.name ILIKE ?)",
+            r.id,
+            ^search_term
+          )
   end
 
   defp maybe_filter_tag(query, nil), do: query
