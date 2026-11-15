@@ -186,6 +186,67 @@ defmodule Cookbook.Planner do
     end
   end
 
+  def cook_together_tip(plan) do
+    plan = Repo.preload(plan, entries: [recipe: :steps])
+
+    Enum.find_value(1..7, fn day ->
+      recipes =
+        plan.entries
+        |> Enum.filter(&(&1.day_of_week == day))
+        |> Enum.map(& &1.recipe)
+        |> Enum.uniq_by(& &1.id)
+
+      Enum.find_value(recipes, fn recipe ->
+        simmer =
+          Enum.find(
+            recipe.steps,
+            &((&1.duration_minutes || 0) >= 20 && Regex.match?(~r/\bsimmer/i, &1.instruction))
+          )
+
+        other = Enum.find(recipes, &(&1.id != recipe.id))
+
+        if simmer && other,
+          do: %{
+            day: day_name(day),
+            recipe: recipe.title,
+            other: other.title,
+            minutes: simmer.duration_minutes
+          }
+      end)
+    end)
+  end
+
+  def fill_empty_slots(plan, suggestions) when is_list(suggestions) do
+    # Reload just before applying, so meals added while AI was running are preserved.
+    plan = Repo.preload(plan, :entries, force: true)
+    allowed = Cookbook.Recipes.list_recipes(plan.user_id) |> MapSet.new(& &1.id)
+    occupied = MapSet.new(plan.entries, &{&1.day_of_week, &1.meal_type})
+
+    Enum.reduce(suggestions, occupied, fn suggestion, occupied ->
+      case suggestion do
+        %{"day_of_week" => day, "meal_type" => type, "recipe_id" => id}
+        when day in 1..7 and type in ["lunch", "dinner"] ->
+          meal = if type == "lunch", do: :lunch, else: :dinner
+
+          if MapSet.member?(allowed, id) && !MapSet.member?(occupied, {day, meal}) do
+            case add_entry(plan, %{day_of_week: day, meal_type: meal, recipe_id: id}) do
+              {:ok, _} -> MapSet.put(occupied, {day, meal})
+              _ -> occupied
+            end
+          else
+            occupied
+          end
+
+        _ ->
+          occupied
+      end
+    end)
+
+    :ok
+  end
+
+  def fill_empty_slots(_plan, _suggestions), do: :ok
+
   @doc """
   Returns the Monday of the week containing the given date.
   """
