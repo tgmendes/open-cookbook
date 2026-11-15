@@ -30,6 +30,7 @@ defmodule CookbookWeb.RecipeListTest do
     assert has_element?(view, "#recipe-grid article", "Tomato soup")
     refute has_element?(view, "#recipe-grid article", "Roast chicken")
     view |> element("#recipe-filters button", "All") |> render_click()
+    assert has_element?(view, "section[aria-label='All recipes'] h2", "All recipes")
     view |> form("#recipe-search", search: "Comfort") |> render_change()
     assert has_element?(view, "#recipe-grid article", "Roast chicken")
     refute has_element?(view, "#recipe-grid article", "Tomato soup")

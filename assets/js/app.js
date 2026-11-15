@@ -81,6 +81,8 @@ document.addEventListener("toggle-theme", () => {
   localStorage.setItem("cookbook-theme", next)
 })
 
+document.addEventListener("cookbook:print", () => window.print())
+
 window.addEventListener("phx:trigger-file-input", (e) => {
   const input = document.getElementById(e.detail.id)
   if (input) input.click()

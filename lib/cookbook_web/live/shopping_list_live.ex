@@ -109,11 +109,21 @@ defmodule CookbookWeb.ShoppingListLive do
               class="flex size-11 items-center justify-center rounded-xl hover:bg-base-200"
             >
               <.icon name="hero-chevron-left" class="size-6" />
-            </.link><span class="text-sm text-muted">{Calendar.strftime(@week_start, "%b %-d")} – {Calendar.strftime(Date.add(@week_start, 6), "%b %-d")}</span>
+            </.link>
+            <span class="text-sm text-muted">
+              {Calendar.strftime(@week_start, "%b %-d")} – {Calendar.strftime(
+                Date.add(@week_start, 6),
+                "%b %-d"
+              )}
+            </span>
           </div>
           <div>
             <h1 class="text-3xl sm:text-4xl">Shopping list</h1>
-            <p class="mt-1 text-sm text-muted">For your week · {length(@plan.entries)} meals</p>
+            <p class="mt-1 text-sm text-muted">
+              For your week · {length(@plan.entries)} {if length(@plan.entries) == 1,
+                do: "meal",
+                else: "meals"}
+            </p>
           </div>
           <div class="flex items-center gap-3">
             <progress
@@ -217,7 +227,8 @@ defmodule CookbookWeb.ShoppingListLive do
             >
               <span class="flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-primary text-primary-content">
                 <.icon name="hero-check" class="size-4" />
-              </span><span class="flex-1 line-through">{item.name}</span><span class="text-sm">{item.quantity} {item.unit}</span>
+              </span>
+              <span class="flex-1 line-through">{item.name}</span><span class="text-sm">{item.quantity} {item.unit}</span>
             </button>
           </div>
         </section>

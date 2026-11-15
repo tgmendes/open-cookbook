@@ -26,7 +26,7 @@ defmodule CookbookWeb.RecipeListLive do
      socket
      |> assign(
        search: params["search"] || "",
-       selected_tag: params["tag"],
+       selected_tag: if(params["tag"] in [nil, ""], do: nil, else: params["tag"]),
        sort: params["sort"] || "recent"
      )
      |> refresh()}
@@ -136,6 +136,8 @@ defmodule CookbookWeb.RecipeListLive do
       )
 
   def render(assigns) do
+    assigns = assign(assigns, :sort_form, to_form(%{"sort" => assigns.sort}))
+
     ~H"""
     <Layouts.app {assigns}>
       <div class="space-y-7">
@@ -147,10 +149,13 @@ defmodule CookbookWeb.RecipeListLive do
           <div class="flex flex-wrap gap-2.5">
             <.link navigate={~p"/recipes/new?mode=url"} class="action">
               <.icon name="hero-link" class="size-4" />Import from link
-            </.link><.link navigate={~p"/recipes/new?mode=generate"} class="action"><.icon
-              name="hero-sparkles"
-              class="size-4"
-            />Describe it</.link><.link navigate={~p"/recipes/new"} class="action action-primary"><.icon
+            </.link>
+            <.link navigate={~p"/recipes/new?mode=generate"} class="action">
+              <.icon
+                name="hero-sparkles"
+                class="size-4"
+              />Describe it
+            </.link><.link navigate={~p"/recipes/new"} class="action action-primary"><.icon
               name="hero-plus"
               class="size-4"
             />New recipe</.link>
@@ -194,7 +199,7 @@ defmodule CookbookWeb.RecipeListLive do
                 {if tag == "", do: "All", else: tag}
               </button>
             </div>
-            <.form for={%{}} id="recipe-sort" phx-change="sort">
+            <.form for={@sort_form} id="recipe-sort" phx-change="sort">
               <.input
                 type="select"
                 name="sort"
@@ -224,8 +229,9 @@ defmodule CookbookWeb.RecipeListLive do
             <h2 class="mt-1 text-[22px]">{@navigation.tonight.title}</h2>
             <p class="mt-1 text-sm text-muted">
               <span :if={@navigation.tonight.total_time_minutes}>
-                {@navigation.tonight.total_time_minutes}  min · 
-              </span><span :if={@navigation.tonight.servings}>serves {@navigation.tonight.servings} · </span>Ingredients are on your shopping list
+                {@navigation.tonight.total_time_minutes} min ·
+              </span>
+              <span :if={@navigation.tonight.servings}>serves {@navigation.tonight.servings} · </span>Ingredients are on your shopping list
             </p>
           </div>
           <div class="flex flex-wrap gap-2.5">
@@ -254,7 +260,7 @@ defmodule CookbookWeb.RecipeListLive do
           <div
             id="recipe-grid"
             phx-update="stream"
-            class="grid grid-cols-1 gap-[18px] sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+            class="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-[18px]"
           >
             <article
               :for={{id, card} <- @streams.recipes}
@@ -322,11 +328,14 @@ defmodule CookbookWeb.RecipeListLive do
                     <.icon name="hero-calendar-days" class="size-4" />{if card.planned,
                       do: "Planned · #{card.planned}",
                       else: "Add to plan"}
-                  </button><.link
+                  </button>
+                  <.link
                     navigate={~p"/recipes/#{card.id}/cook"}
                     aria-label={"Cook #{card.recipe.title}"}
                     class="flex size-11 items-center justify-center rounded-xl bg-teal-tint text-teal-ink"
-                  ><.icon name="hero-fire" class="size-5" /></.link>
+                  >
+                    <.icon name="hero-fire" class="size-5" />
+                  </.link>
                 </div>
               </div>
             </article>

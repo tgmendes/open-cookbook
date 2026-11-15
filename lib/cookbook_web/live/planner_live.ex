@@ -184,6 +184,13 @@ defmodule CookbookWeb.PlannerLive do
   end
 
   def render(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :slot_form,
+        to_form(%{"day" => assigns.selected_day, "meal" => assigns.selected_meal}, as: :slot)
+      )
+
     ~H"""
     <Layouts.app {assigns}>
       <div class="min-w-0 space-y-6">
@@ -202,7 +209,8 @@ defmodule CookbookWeb.PlannerLive do
                 class="action size-11 !rounded-full !p-0"
               >
                 <.icon name="hero-chevron-left" class="size-5" />
-              </.link><span class="min-w-36 text-center font-bold">{Calendar.strftime(@week_start, "%-d %b")} – {Calendar.strftime(Date.add(@week_start, 6), "%-d %b")}</span><.link
+              </.link>
+              <span class="min-w-36 text-center font-bold">{Calendar.strftime(@week_start, "%-d %b")} – {Calendar.strftime(Date.add(@week_start, 6), "%-d %b")}</span><.link
                 id="next-week"
                 patch={~p"/planner?week=#{Date.to_iso8601(@nav.next)}"}
                 aria-label="Next week"
@@ -220,7 +228,8 @@ defmodule CookbookWeb.PlannerLive do
               <.icon name="hero-sparkles" class="size-4" />{if @ai_loading,
                 do: "Finding meals…",
                 else: "Fill #{14 - @filled_count} empty slots"}
-            </button><.link
+            </button>
+            <.link
               navigate={~p"/planner/shopping?week=#{Date.to_iso8601(@week_start)}"}
               class="action action-primary"
             ><.icon name="hero-shopping-cart" class="size-4" />Shopping list · {@shopping_count} left</.link>
@@ -359,7 +368,7 @@ defmodule CookbookWeb.PlannerLive do
           >
             <h2 class="text-lg">Add from your recipes</h2>
             <.form
-              for={%{}}
+              for={@slot_form}
               as={:slot}
               id="tray-slot"
               phx-change="select_slot"
@@ -425,7 +434,8 @@ defmodule CookbookWeb.PlannerLive do
                   tone(recipe.id)
                 ]}>
                   <.icon name="hero-book-open" class="size-5" />
-                </span><span class="min-w-0 flex-1"><span class="block text-sm font-bold">{recipe.title}</span><span
+                </span>
+                <span class="min-w-0 flex-1"><span class="block text-sm font-bold">{recipe.title}</span><span
                   :if={recipe.total_time_minutes}
                   class="text-xs text-muted"
                 >{recipe.total_time_minutes} min</span></span><button

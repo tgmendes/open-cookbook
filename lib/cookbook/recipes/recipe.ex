@@ -18,7 +18,11 @@ defmodule Cookbook.Recipes.Recipe do
     field :notes, :string
 
     belongs_to :user, Cookbook.Accounts.User
-    has_many :ingredients, Cookbook.Recipes.Ingredient, on_replace: :delete, preload_order: [asc: :position]
+
+    has_many :ingredients, Cookbook.Recipes.Ingredient,
+      on_replace: :delete,
+      preload_order: [asc: :position]
+
     has_many :steps, Cookbook.Recipes.Step, on_replace: :delete, preload_order: [asc: :position]
 
     timestamps(type: :utc_datetime)
@@ -27,13 +31,30 @@ defmodule Cookbook.Recipes.Recipe do
   def changeset(recipe, attrs) do
     recipe
     |> cast(attrs, [
-      :title, :description, :servings, :prep_time_minutes, :cook_time_minutes,
-      :source_url, :source_type, :tags, :image_url, :notes, :user_id
+      :title,
+      :description,
+      :servings,
+      :prep_time_minutes,
+      :cook_time_minutes,
+      :source_url,
+      :source_type,
+      :tags,
+      :image_url,
+      :notes,
+      :user_id
     ])
     |> validate_required([:title, :user_id])
     |> compute_total_time()
-    |> cast_assoc(:ingredients, with: &Cookbook.Recipes.Ingredient.changeset/2, sort_param: :ingredients_sort, drop_param: :ingredients_drop)
-    |> cast_assoc(:steps, with: &Cookbook.Recipes.Step.changeset/2, sort_param: :steps_sort, drop_param: :steps_drop)
+    |> cast_assoc(:ingredients,
+      with: &Cookbook.Recipes.Ingredient.changeset/2,
+      sort_param: :ingredients_sort,
+      drop_param: :ingredients_drop
+    )
+    |> cast_assoc(:steps,
+      with: &Cookbook.Recipes.Step.changeset/2,
+      sort_param: :steps_sort,
+      drop_param: :steps_drop
+    )
     |> foreign_key_constraint(:user_id)
   end
 

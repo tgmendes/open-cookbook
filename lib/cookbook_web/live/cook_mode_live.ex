@@ -135,6 +135,24 @@ defmodule CookbookWeb.CookModeLive do
   defp lane_class(index),
     do: Enum.at(["bg-lavender", "bg-butter", "bg-peach", "bg-sage", "bg-sky"], rem(index, 5))
 
+  defp equipment(steps) do
+    text = Enum.map_join(steps, " ", & &1.instruction)
+
+    [
+      "Chopping board",
+      "Knife",
+      "Baking tray",
+      "Saucepan",
+      "Frying pan",
+      "Wok",
+      "Grater",
+      "Mixing bowl",
+      "Colander",
+      "Sieve"
+    ]
+    |> Enum.filter(&Regex.match?(~r/\b#{Regex.escape(&1)}\b/i, text))
+  end
+
   def render(assigns) do
     ingredients = assigns.adjusted_ingredients || assigns.recipe.ingredients
     step = Enum.at(assigns.steps, max(assigns.current_step, 0))
@@ -143,6 +161,7 @@ defmodule CookbookWeb.CookModeLive do
     assigns =
       assign(assigns,
         ingredients: ingredients,
+        equipment: equipment(assigns.steps),
         step: step,
         next_step: next_step,
         step_ingredients: if(step, do: matched_ingredients(step, ingredients), else: []),
@@ -286,6 +305,22 @@ defmodule CookbookWeb.CookModeLive do
                 </button>
               </div>
             </section>
+            <section
+              :if={@equipment != []}
+              id="cook-equipment"
+              aria-label="Equipment"
+              class="space-y-3"
+            >
+              <h2 class="text-lg">Equipment</h2>
+              <div class="flex flex-wrap gap-2">
+                <span
+                  :for={item <- @equipment}
+                  class="rounded-full bg-sky px-3 py-2 text-sm text-sky-ink"
+                >
+                  {item}
+                </span>
+              </div>
+            </section>
           </div>
           <footer class="fixed inset-x-0 bottom-0 z-10 border-t border-base-300 bg-base-200 px-5 py-4 pb-[max(20px,env(safe-area-inset-bottom))]">
             <div class="mx-auto max-w-2xl space-y-2">
@@ -320,7 +355,8 @@ defmodule CookbookWeb.CookModeLive do
             </p>
           </div>
           <button id="all-ingredients" phx-click="toggle-ingredients" class="action !px-3">
-            <.icon name="hero-list-bullet" class="size-5" /><span class="hidden sm:inline">
+            <.icon name="hero-list-bullet" class="size-5" />
+            <span class="hidden sm:inline">
               All ingredients
             </span>
           </button>
@@ -364,9 +400,9 @@ defmodule CookbookWeb.CookModeLive do
               <div class="flex flex-wrap gap-2.5">
                 <span
                   :for={ing <- @step_ingredients}
-                  class="surface !rounded-[14px] px-4 py-3 text-lg"
+                  class="surface inline-flex items-baseline gap-2 !rounded-[14px] px-4 py-3 text-lg"
                 >
-                  <strong>{ing.quantity} {ing.unit}</strong> {ing.name}
+                  <strong>{ing.quantity} {ing.unit}</strong><span>{ing.name}</span>
                 </span>
               </div>
             </section>
@@ -389,7 +425,8 @@ defmodule CookbookWeb.CookModeLive do
             <div class="mt-auto flex gap-3 pt-8">
               <button id="previous-step" phx-click="prev" class="action min-h-16 !px-4 sm:min-w-36">
                 <.icon name="hero-chevron-left" class="size-5" />Back
-              </button><button
+              </button>
+              <button
                 id="next-step"
                 phx-click="next"
                 class="action action-primary min-h-16 min-w-0 flex-1 justify-between text-left"

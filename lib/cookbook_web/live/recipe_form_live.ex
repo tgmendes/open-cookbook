@@ -1,8 +1,7 @@
 defmodule CookbookWeb.RecipeFormLive do
   use CookbookWeb, :live_view
-
-  alias Cookbook.Recipes
-  alias Cookbook.Recipes.Recipe
+  alias Cookbook.{Recipes, AI}
+  alias Cookbook.Recipes.{Recipe, Ingredient, Step}
 
   @suggestions [
     "A quick weeknight pasta with pantry staples",
@@ -12,378 +11,171 @@ defmodule CookbookWeb.RecipeFormLive do
   ]
 
   def mount(params, _session, socket) do
-    {recipe, action, page_title} =
-      case params do
-        %{"id" => id} ->
-          recipe = Recipes.get_recipe!(id)
-          {recipe, :edit, "Edit #{recipe.title}"}
+    user_id = socket.assigns.current_user.id
 
-        _ ->
-          {%Recipe{
-             user_id: socket.assigns.current_user.id,
-             ingredients: [],
-             steps: [],
-             tags: []
-           }, :new, "New Recipe"}
-      end
+    recipe =
+      if params["id"],
+        do: Recipes.get_recipe!(params["id"]),
+        else: %Recipe{user_id: user_id, ingredients: [], steps: [], tags: []}
 
-    changeset = Recipes.change_recipe(recipe, %{})
+    if recipe.user_id != user_id do
+      {:ok, push_navigate(socket, to: ~p"/recipes")}
+    else
+      action = if recipe.id, do: :edit, else: :new
+      mode = if params["mode"] in ["url", "generate", "ai"], do: :ai, else: :manual
 
-    socket =
-      socket
-      |> assign(
-        recipe: recipe,
-        action: action,
-        page_title: page_title,
-        form: to_form(changeset),
-        tags_input: Enum.join(recipe.tags || [], ", ")
-      )
-      |> allow_upload(:recipe_image,
-        accept: ~w(.jpg .jpeg .png .webp),
-        max_entries: 1,
-        max_file_size: 10_000_000
-      )
-
-    socket =
-      if action == :new do
-        socket
-        |> assign(
-          page_full_width: true,
-          ui_state: :creator_input,
-          ai_input_text: "",
-          ai_loading: false,
-          ai_loading_message: "",
-          ai_error: nil,
-          ai_feedback: nil,
-          recipe_attrs: nil,
-          ai_suggestions: [],
-          creation_mode: :ai,
-          messages: [
-            %{role: :assistant, content: "What would you like to cook? Describe a recipe, paste a URL, or upload a photo."}
-          ]
-        )
-      else
-        socket
-      end
-
-    {:ok, socket}
+      {:ok,
+       socket
+       |> assign(
+         recipe: recipe,
+         action: action,
+         page_title: if(action == :edit, do: "Edit recipe", else: "New recipe"),
+         form: to_form(Recipes.change_recipe(recipe)),
+         tags_input: Enum.join(recipe.tags || [], ", "),
+         creation_mode: mode,
+         input_kind: params["mode"],
+         ai_loading: false,
+         ai_error: nil,
+         recipe_attrs: nil,
+         recipe_ready?: false,
+         ai_suggestions: [],
+         ai_form: to_form(%{"ai_input" => ""}),
+         refine_form: to_form(%{"refine_input" => ""})
+       )
+       |> stream(:messages, [])
+       |> allow_upload(:recipe_image,
+         accept: ~w(.jpg .jpeg .png .webp),
+         max_entries: 1,
+         max_file_size: 10_000_000
+       ), layout: false}
+    end
   end
 
-  # ── AI events (only :new action) ──
+  def handle_event("set_creation_mode", %{"mode" => mode}, socket),
+    do: {:noreply, assign(socket, creation_mode: if(mode == "manual", do: :manual, else: :ai))}
 
-  def handle_event("ai_validate", %{"value" => text}, socket) do
-    {:noreply, assign(socket, ai_input_text: text)}
-  end
+  def handle_event("validate-upload", params, socket),
+    do: {:noreply, assign(socket, ai_form: to_form(%{"ai_input" => params["ai_input"] || ""}))}
 
-  def handle_event("set_creation_mode", %{"mode" => mode}, socket) do
-    {:noreply, assign(socket, creation_mode: if(mode == "manual", do: :manual, else: :ai))}
-  end
+  def handle_event("cancel-upload", %{"ref" => ref}, socket),
+    do: {:noreply, cancel_upload(socket, :recipe_image, ref)}
 
-  def handle_event("use_suggestion", %{"text" => text}, socket) do
-    {:noreply, assign(socket, ai_input_text: text)}
-  end
-
-  def handle_event("dismiss_error", _params, socket) do
-    {:noreply, assign(socket, ai_error: nil)}
-  end
-
-  def handle_event("dismiss_feedback", _params, socket) do
-    {:noreply, assign(socket, ai_feedback: nil)}
-  end
+  def handle_event("use_suggestion", %{"text" => text}, socket),
+    do: {:noreply, assign(socket, ai_form: to_form(%{"ai_input" => text}))}
 
   def handle_event("ai_submit", params, socket) do
-    # Read from form params first (handles mobile paste which doesn't trigger phx-keyup)
-    input_text = String.trim(Map.get(params, "ai_input", socket.assigns.ai_input_text))
-    socket = assign(socket, ai_input_text: input_text)
-    uploads = socket.assigns.uploads.recipe_image.entries
+    text = String.trim(params["ai_input"] || "")
+    system = socket.assigns.current_user.unit_system
 
     cond do
-      uploads != [] ->
-        [image_base64] =
-          consume_uploaded_entries(socket, :recipe_image, fn %{path: path}, _entry ->
-            data = File.read!(path)
-            {:ok, Base.encode64(data)}
-          end)
-
-        user_msg = %{role: :user, content: "Extract recipe from uploaded image"}
-        messages = socket.assigns.messages ++ [user_msg]
-
-        socket =
-          socket
-          |> assign(
-            ui_state: :loading,
-            ai_loading: true,
-            ai_loading_message: "Extracting from image...",
-            ai_error: nil,
-            messages: messages,
-            ai_input_text: ""
-          )
-
-        self_pid = self()
-
-        Task.start(fn ->
-          result = Cookbook.AI.extract_recipe_from_image(image_base64, socket.assigns.current_user.unit_system)
-          send(self_pid, {:ai_result, result, nil})
-        end)
-
+      socket.assigns.ai_loading ->
         {:noreply, socket}
 
-      Regex.match?(~r/https?:\/\//, input_text) ->
-        text = input_text
+      Enum.any?(socket.assigns.uploads.recipe_image.entries, &(!&1.done?)) ->
+        {:noreply, assign(socket, ai_error: "Wait for the photo to finish uploading.")}
 
-        url =
-          Regex.run(~r/https?:\/\/[^\s]+/, text)
-          |> List.first()
+      socket.assigns.uploads.recipe_image.entries != [] ->
+        case consume_uploaded_entries(socket, :recipe_image, fn %{path: path}, _ ->
+               {:ok, Base.encode64(File.read!(path))}
+             end) do
+          [image] ->
+            run_ai(socket, "Extract recipe from photo", fn ->
+              {:recipe, AI.extract_recipe_from_image(image, system)}
+            end)
 
-        if url do
-          user_msg = %{role: :user, content: "Import recipe from: #{url}"}
-          messages = socket.assigns.messages ++ [user_msg]
-
-          socket =
-            socket
-            |> assign(
-              ui_state: :loading,
-              ai_loading: true,
-              ai_loading_message: "Importing from URL...",
-              ai_error: nil,
-              messages: messages,
-              ai_input_text: ""
-            )
-
-          self_pid = self()
-
-          Task.start(fn ->
-            result = Cookbook.AI.scrape_recipe_from_url(url, socket.assigns.current_user.unit_system)
-            send(self_pid, {:ai_result, result, nil})
-          end)
-
-          {:noreply, socket}
-        else
-          {:noreply, assign(socket, ai_error: "Please enter a valid URL.")}
+          _ ->
+            {:noreply, assign(socket, ai_error: "Wait for the photo to finish uploading.")}
         end
+
+      Regex.match?(~r/https?:\/\//, text) ->
+        [url | _] = Regex.run(~r/https?:\/\/[^\s]+/, text)
+
+        run_ai(socket, "Import recipe from #{url}", fn ->
+          {:recipe, AI.scrape_recipe_from_url(url, system)}
+        end)
+
+      text == "" ->
+        {:noreply,
+         assign(socket, ai_error: "Describe a recipe, paste a link, or upload a photo.")}
 
       true ->
-        if input_text == "" do
-          {:noreply, assign(socket, ai_error: "Please describe what you'd like to cook.")}
-        else
-          user_msg = %{role: :user, content: input_text}
-          messages = socket.assigns.messages ++ [user_msg]
-
-          socket =
-            socket
-            |> assign(
-              ui_state: :loading,
-              ai_loading: true,
-              ai_loading_message: "Finding recipe ideas...",
-              ai_error: nil,
-              messages: messages,
-              ai_input_text: ""
-            )
-
-          self_pid = self()
-
-          Task.start(fn ->
-            result = Cookbook.AI.suggest_recipes(input_text)
-            send(self_pid, {:ai_suggestions_result, result})
-          end)
-
-          {:noreply, socket}
-        end
+        run_ai(socket, text, fn -> {:suggestions, AI.suggest_recipes(text)} end)
     end
   end
 
-  def handle_event("pick_suggestion", %{"index" => index}, socket) do
-    suggestion = Enum.at(socket.assigns.ai_suggestions, String.to_integer(index))
+  def handle_event("pick_suggestion", %{"index" => value}, socket) do
+    with {index, ""} <- Integer.parse(value),
+         suggestion when is_map(suggestion) <- Enum.at(socket.assigns.ai_suggestions, index),
+         false <- socket.assigns.ai_loading do
+      system = socket.assigns.current_user.unit_system
 
-    prompt =
-      "Create a recipe for: #{suggestion["title"]}. #{suggestion["description"]}"
-
-    user_msg = %{role: :user, content: "→ #{suggestion["title"]}"}
-    messages = socket.assigns.messages ++ [user_msg]
-
-    socket =
-      socket
-      |> assign(
-        ui_state: :loading,
-        ai_loading: true,
-        ai_loading_message: "Creating your recipe...",
-        ai_error: nil,
-        messages: messages
-      )
-
-    self_pid = self()
-
-    Task.start(fn ->
-      result = Cookbook.AI.generate_recipe(prompt, socket.assigns.current_user.unit_system)
-      send(self_pid, {:ai_result, result, nil})
-    end)
-
-    {:noreply, socket}
-  end
-
-  def handle_event("back_to_input", _params, socket) do
-    {:noreply, assign(socket, ui_state: :creator_input, ai_suggestions: [])}
-  end
-
-  def handle_event("ai_refine", %{"refine_input" => text}, socket) do
-    text = String.trim(text)
-
-    if text == "" do
-      {:noreply, socket}
-    else
-      user_msg = %{role: :user, content: text}
-      messages = socket.assigns.messages ++ [user_msg]
-
-      socket = assign(socket, ai_loading: true, ai_feedback: nil, messages: messages)
-      self_pid = self()
-      attrs = socket.assigns.recipe_attrs
-
-      Task.start(fn ->
-        result = Cookbook.AI.refine_recipe(attrs, text, socket.assigns.current_user.unit_system)
-        send(self_pid, {:ai_refine_result, result})
+      run_ai(socket, suggestion["title"], fn ->
+        {:recipe,
+         AI.generate_recipe("#{suggestion["title"]}. #{suggestion["description"]}", system)}
       end)
+    else
+      _ -> {:noreply, socket}
+    end
+  end
 
+  def handle_event("ai_refine", %{"refine_input" => value}, socket) do
+    text = String.trim(value)
+
+    if text != "" && socket.assigns.recipe_attrs && !socket.assigns.ai_loading do
+      attrs = socket.assigns.recipe_attrs
+      system = socket.assigns.current_user.unit_system
+      run_ai(socket, text, fn -> {:recipe, AI.refine_recipe(attrs, text, system)} end)
+    else
       {:noreply, socket}
     end
   end
 
-  # ── Upload events ──
-
-  def handle_event("validate-upload", _params, socket) do
-    {:noreply, socket}
-  end
-
-  def handle_event("cancel-upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :recipe_image, ref)}
-  end
-
-  # ── Form events (shared :new and :edit) ──
-
-  def handle_event("validate", %{"recipe" => recipe_params}, socket) do
-    recipe_params = process_tags(recipe_params, socket)
+  def handle_event("validate", %{"recipe" => params}, socket) do
+    params = process_tags(params, socket)
 
     changeset =
-      socket.assigns.recipe
-      |> Recipes.change_recipe(recipe_params)
-      |> Map.put(:action, :validate)
-
-    {:noreply, assign(socket, form: to_form(changeset))}
-  end
-
-  def handle_event("save", %{"recipe" => recipe_params}, socket) do
-    recipe_params = process_tags(recipe_params, socket)
-    save_recipe(socket, socket.assigns.action, recipe_params)
-  end
-
-  def handle_event("add_ingredient", _params, socket) do
-    changeset = socket.assigns.form.source
-    ingredients = Ecto.Changeset.get_field(changeset, :ingredients) || []
-
-    new_ingredient = %Cookbook.Recipes.Ingredient{position: length(ingredients)}
-    updated = ingredients ++ [new_ingredient]
-
-    changeset =
-      socket.assigns.recipe
-      |> Recipes.change_recipe(
-        changeset.params
-        |> Map.put("ingredients", build_nested_params(updated, &ingredient_to_params/1))
-      )
-
-    {:noreply, assign(socket, form: to_form(changeset))}
-  end
-
-  def handle_event("add_step", _params, socket) do
-    changeset = socket.assigns.form.source
-    steps = Ecto.Changeset.get_field(changeset, :steps) || []
-
-    new_step = %Cookbook.Recipes.Step{position: length(steps)}
-    updated = steps ++ [new_step]
-
-    changeset =
-      socket.assigns.recipe
-      |> Recipes.change_recipe(
-        changeset.params
-        |> Map.put("steps", build_nested_params(updated, &step_to_params/1))
-      )
-
-    {:noreply, assign(socket, form: to_form(changeset))}
-  end
-
-  def handle_event("update_tags_input", %{"value" => value}, socket) do
-    {:noreply, assign(socket, tags_input: value)}
-  end
-
-  # ── AI result handlers ──
-
-  def handle_info({:ai_suggestions_result, {:ok, suggestions}}, socket) do
-    asst_msg = %{role: :assistant, content: "Here are #{length(suggestions)} recipe ideas — click one to get started:"}
-    messages = socket.assigns.messages ++ [asst_msg]
+      Recipes.change_recipe(socket.assigns.recipe, params) |> Map.put(:action, :validate)
 
     {:noreply,
-     socket
-     |> assign(
-       ui_state: :picking_suggestion,
-       ai_suggestions: suggestions,
-       ai_loading: false,
-       ai_loading_message: "",
-       messages: messages
+     assign(socket,
+       form: to_form(changeset),
+       tags_input: params["tags_input"] || socket.assigns.tags_input
      )}
   end
 
-  def handle_info({:ai_suggestions_result, {:error, reason}}, socket) do
-    asst_msg = %{role: :assistant, content: "Sorry, couldn't find recipe ideas. #{format_error(reason)}"}
-    messages = socket.assigns.messages ++ [asst_msg]
+  def handle_event("save", %{"recipe" => params}, socket) do
+    params = process_tags(params, socket)
 
+    result =
+      if socket.assigns.action == :new,
+        do: Recipes.create_recipe(params),
+        else: Recipes.update_recipe(socket.assigns.recipe, params)
+
+    case result do
+      {:ok, recipe} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Recipe saved.")
+         |> push_navigate(to: ~p"/recipes/#{recipe.id}")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, form: to_form(changeset))}
+    end
+  end
+
+  def handle_event("add_ingredient", _, socket),
+    do: add_nested(socket, :ingredients, %Ingredient{})
+
+  def handle_event("add_step", _, socket), do: add_nested(socket, :steps, %Step{})
+
+  def handle_async(:ai, {:ok, {:suggestions, {:ok, suggestions}}}, socket) do
     {:noreply,
      socket
-     |> assign(
-       ui_state: :creator_input,
-       ai_loading: false,
-       ai_loading_message: "",
-       ai_error: format_error(reason),
-       messages: messages
-     )}
+     |> assign(ai_loading: false, ai_suggestions: suggestions)
+     |> message(:assistant, "Pick an idea below, or try another description.")}
   end
 
-  def handle_info({:ai_result, {:ok, attrs}, _ref}, socket) do
-    apply_recipe_attrs(socket, attrs, :recipe_ready)
-  end
-
-  def handle_info({:ai_result, {:error, reason}, _ref}, socket) do
-    asst_msg = %{role: :assistant, content: "Something went wrong: #{format_error(reason)}"}
-    messages = socket.assigns.messages ++ [asst_msg]
-
-    {:noreply,
-     socket
-     |> assign(
-       ui_state: :creator_input,
-       ai_loading: false,
-       ai_loading_message: "",
-       ai_error: format_error(reason),
-       messages: messages
-     )}
-  end
-
-  def handle_info({:ai_refine_result, {:ok, attrs}}, socket) do
-    apply_recipe_attrs(socket, attrs, :recipe_ready, "Recipe updated based on your request.")
-  end
-
-  def handle_info({:ai_refine_result, {:error, reason}}, socket) do
-    asst_msg = %{role: :assistant, content: "Couldn't refine: #{format_error(reason)}"}
-    messages = socket.assigns.messages ++ [asst_msg]
-
-    {:noreply,
-     socket
-     |> assign(
-       ai_loading: false,
-       ai_feedback: "Failed to refine: #{format_error(reason)}",
-       messages: messages
-     )}
-  end
-
-  # ── Private helpers ──
-
-  defp apply_recipe_attrs(socket, attrs, ui_state, feedback \\ nil) do
+  def handle_async(:ai, {:ok, {:recipe, {:ok, attrs}}}, socket) do
     attrs = Map.put(attrs, "user_id", socket.assigns.current_user.id)
 
     recipe = %Recipe{
@@ -393,812 +185,425 @@ defmodule CookbookWeb.RecipeFormLive do
       tags: []
     }
 
-    changeset = Recipes.change_recipe(recipe, attrs)
-
-    asst_content = feedback || "Here's your recipe! Review and edit it, then save when you're happy."
-    asst_msg = %{role: :assistant, content: asst_content}
-    messages = socket.assigns.messages ++ [asst_msg]
-
     {:noreply,
      socket
      |> assign(
-       ui_state: ui_state,
-       form: to_form(changeset),
        recipe: recipe,
-       tags_input: Enum.join(attrs["tags"] || [], ", "),
+       form: to_form(Recipes.change_recipe(recipe, attrs)),
        recipe_attrs: attrs,
+       recipe_ready?: true,
        ai_loading: false,
-       ai_loading_message: "",
-       ai_feedback: feedback,
-       messages: messages
+       ai_suggestions: [],
+       tags_input: Enum.join(attrs["tags"] || [], ", ")
+     )
+     |> message(
+       :assistant,
+       "Your recipe is ready to review. Edit anything, then save it to your collection."
      )}
   end
 
-  defp format_error(reason) do
-    case reason do
-      :missing_api_key ->
-        "OPENROUTER_API_KEY is not configured."
+  def handle_async(:ai, _, socket),
+    do:
+      {:noreply,
+       assign(socket,
+         ai_loading: false,
+         ai_error:
+           "Couldn't complete that request. Please try again, or write the recipe yourself."
+       )}
 
-      {:http_error, status} ->
-        "Failed to fetch URL (HTTP #{status})."
-
-      {:api_error, status, %{"error" => %{"message" => message}}} ->
-        "AI error (#{status}): #{message}"
-
-      {:api_error, status, _body} ->
-        "AI request failed with status #{status}."
-
-      {:request_failed, reason} ->
-        "AI request failed: #{inspect(reason)}"
-
-      {:json_parse_error, _text} ->
-        "Failed to parse AI response. Please try again."
-
-      _ ->
-        "Something went wrong. Please try again."
-    end
+  defp run_ai(socket, text, function) do
+    {:noreply,
+     socket
+     |> assign(ai_loading: true, ai_error: nil)
+     |> message(:user, text)
+     |> start_async(:ai, function)}
   end
 
-  defp process_tags(recipe_params, socket) do
-    tags_input = recipe_params["tags_input"] || socket.assigns.tags_input || ""
+  defp message(socket, role, content),
+    do:
+      stream_insert(socket, :messages, %{
+        id: System.unique_integer([:positive]),
+        role: role,
+        content: content
+      })
 
+  defp process_tags(params, socket) do
     tags =
-      tags_input
-      |> String.split(",")
+      String.split(params["tags_input"] || socket.assigns.tags_input, ",")
       |> Enum.map(&String.trim/1)
       |> Enum.reject(&(&1 == ""))
 
-    recipe_params
-    |> Map.put("tags", tags)
-    |> Map.put("user_id", socket.assigns.current_user.id)
+    params |> Map.put("tags", tags) |> Map.put("user_id", socket.assigns.current_user.id)
   end
 
-  defp save_recipe(socket, :new, recipe_params) do
-    case Recipes.create_recipe(recipe_params) do
-      {:ok, recipe} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Recipe created!")
-         |> push_navigate(to: ~p"/recipes/#{recipe.id}")}
+  defp add_nested(socket, field, new) do
+    changeset = socket.assigns.form.source
+    items = Ecto.Changeset.get_field(changeset, field) || []
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset))}
-    end
+    params =
+      (items ++ [Map.put(new, :position, length(items))])
+      |> Enum.with_index()
+      |> Map.new(fn {item, index} ->
+        fields =
+          if field == :steps,
+            do: [:id, :instruction, :short_title, :position, :duration_minutes],
+            else: [:id, :name, :quantity, :unit, :group_name, :position]
+
+        {to_string(index), Map.new(fields, &{to_string(&1), Map.get(item, &1)})}
+      end)
+
+    changeset =
+      Recipes.change_recipe(
+        socket.assigns.recipe,
+        Map.put(changeset.params || %{}, to_string(field), params)
+      )
+
+    {:noreply, assign(socket, form: to_form(changeset))}
   end
-
-  defp save_recipe(socket, :edit, recipe_params) do
-    case Recipes.update_recipe(socket.assigns.recipe, recipe_params) do
-      {:ok, recipe} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Recipe updated!")
-         |> push_navigate(to: ~p"/recipes/#{recipe.id}")}
-
-      {:error, changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset))}
-    end
-  end
-
-  defp build_nested_params(items, to_params_fn) do
-    items
-    |> Enum.with_index()
-    |> Enum.map(fn {item, idx} -> {to_string(idx), to_params_fn.(item)} end)
-    |> Map.new()
-  end
-
-  defp ingredient_to_params(%{} = ing) do
-    %{
-      "name" => Map.get(ing, :name, "") || "",
-      "quantity" => Map.get(ing, :quantity, "") || "",
-      "unit" => Map.get(ing, :unit, "") || "",
-      "group_name" => Map.get(ing, :group_name, "") || "",
-      "position" => to_string(Map.get(ing, :position, 0))
-    }
-  end
-
-  defp step_to_params(%{} = step) do
-    %{
-      "instruction" => Map.get(step, :instruction, "") || "",
-      "position" => to_string(Map.get(step, :position, 0)),
-      "duration_minutes" => to_string(Map.get(step, :duration_minutes, "") || "")
-    }
-  end
-
-  # ── Render ──
 
   def render(assigns) do
     ~H"""
-    <%= if @action == :edit do %>
-      <div class="max-w-2xl mx-auto">
-        <.header>
-          <div class="flex items-center gap-2">
-            <.icon name="hero-pencil-square" class="size-5 text-primary" />
-            {@page_title}
-          </div>
-        </.header>
-        <div class="mt-6 pb-8">
-          <.recipe_form form={@form} action={@action} recipe={@recipe} tags_input={@tags_input} uploads={@uploads} unit_system={@current_user.unit_system} />
-        </div>
-      </div>
-    <% else %>
-
-      <%!-- Mobile / tablet: single-column centered flow (hidden on lg+) --%>
-      <div class="lg:hidden">
-        <%= case @ui_state do %>
-          <% :creator_input -> %>
-            <.creator_input
-              ai_input_text={@ai_input_text}
-              ai_error={@ai_error}
-              uploads={@uploads}
-            />
-          <% :loading -> %>
-            <.loading_state message={@ai_loading_message} />
-          <% :picking_suggestion -> %>
-            <.suggestion_picker
-              suggestions={@ai_suggestions}
-              ai_input_text={@ai_input_text}
-            />
-          <% :recipe_ready -> %>
-            <.recipe_ready_state
-              form={@form}
-              action={@action}
-              recipe={@recipe}
-              tags_input={@tags_input}
-              uploads={@uploads}
-              ai_loading={@ai_loading}
-              ai_feedback={@ai_feedback}
-              unit_system={@current_user.unit_system}
-            />
-        <% end %>
-      </div>
-
-      <%!-- Desktop: full-height two-column — form LEFT, AI RIGHT --%>
-      <div class="hidden lg:flex flex-col" style="min-height: 100vh;">
-
-        <%!-- Header bar --%>
-        <div class="flex items-center gap-4 px-8 py-4 border-b border-base-300/50 bg-base-100 shrink-0">
-          <div class="flex items-center gap-3 min-w-0">
-            <.link navigate={~p"/recipes"} class="flex items-center gap-1 text-sm text-base-content/50 hover:text-base-content transition-colors shrink-0">
-              <.icon name="hero-arrow-left" class="size-4" />
-              Back
+    <Layouts.app {assigns}>
+      <div class="mx-auto max-w-6xl space-y-6">
+        <header class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <.link
+              navigate="/recipes"
+              class="inline-flex min-h-11 items-center gap-2 text-sm text-muted"
+            >
+              <.icon name="hero-arrow-left" class="size-4" />Back to recipes
             </.link>
-            <span class="text-base-content/30">|</span>
-            <h1 class="text-lg font-bold text-base-content">New Recipe</h1>
+            <h1 class="mt-1 text-4xl">{@page_title}</h1>
+            <p class="mt-2 text-muted">A recipe worth keeping.</p>
           </div>
-
-          <%!-- Mode tabs --%>
-          <div class="flex items-center gap-1 flex-1 justify-center">
+          <div
+            :if={@action == :new}
+            class="flex rounded-xl border border-base-300 bg-base-200 p-1"
+            role="tablist"
+            aria-label="Recipe creation"
+          >
             <button
+              id="mode-manual"
+              role="tab"
+              aria-selected={to_string(@creation_mode == :manual)}
               phx-click="set_creation_mode"
               phx-value-mode="manual"
               class={[
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                if(@creation_mode == :manual,
-                  do: "bg-primary text-primary-content",
-                  else: "text-base-content/60 hover:text-base-content hover:bg-base-200"
-                )
+                "min-h-11 rounded-lg px-4 text-sm font-bold",
+                @creation_mode == :manual && "bg-base-content text-base-100"
               ]}
             >
-              Manual
-            </button>
-            <button
+              Write it yourself
+            </button><button
+              id="mode-ai"
+              role="tab"
+              aria-selected={to_string(@creation_mode == :ai)}
               phx-click="set_creation_mode"
               phx-value-mode="ai"
               class={[
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                if(@creation_mode == :ai,
-                  do: "bg-primary text-primary-content",
-                  else: "text-base-content/60 hover:text-base-content hover:bg-base-200"
-                )
+                "min-h-11 rounded-lg px-4 text-sm font-bold",
+                @creation_mode == :ai && "bg-base-content text-base-100"
               ]}
-            >
-              AI
-            </button>
+            >Use AI</button>
           </div>
-
-          <div class="shrink-0 min-w-[110px] flex justify-end">
-            <%= if @ui_state == :recipe_ready || @creation_mode == :manual do %>
-              <button
-                form="recipe-form-desktop"
-                type="submit"
-                class="px-5 py-2 rounded-xl bg-primary text-primary-content text-sm font-semibold hover:bg-primary/90 transition-colors"
-              >
-                Save Recipe
-              </button>
-            <% end %>
-          </div>
-        </div>
-
-        <%!-- Two-column body — fills remaining height --%>
-        <div class="flex flex-1 min-h-0">
-
-          <%!-- LEFT: form or placeholder (scrollable) --%>
-          <div class="flex-1 min-h-0 overflow-y-auto px-8 py-6">
-            <%= if @ui_state == :recipe_ready || @creation_mode == :manual do %>
-              <.recipe_form
-                form={@form}
-                action={@action}
-                recipe={@recipe}
-                tags_input={@tags_input}
-                uploads={@uploads}
-                unit_system={@current_user.unit_system}
-                form_id="recipe-form-desktop"
-              />
-            <% else %>
-              <div class="h-full flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-base-300/50 p-10 text-center min-h-[400px]">
-                <div class="w-16 h-16 rounded-2xl bg-base-200 flex items-center justify-center">
-                  <.icon name="hero-book-open" class="size-8 text-base-content/20" />
-                </div>
-                <div>
-                  <p class="font-medium text-base-content/30">Your recipe will appear here</p>
-                  <p class="text-sm text-base-content/20 mt-1">Describe a recipe in the chat to get started</p>
-                </div>
-              </div>
-            <% end %>
-          </div>
-
-          <%!-- RIGHT: AI chat panel (fixed width, full height, flex column) --%>
-          <div class="w-[30rem] shrink-0 border-l border-base-300/50 flex flex-col min-h-0">
-
-            <%!-- AI header (always shown) --%>
-            <div class="flex items-center gap-3 px-4 py-3.5 border-b border-base-300/50 shrink-0">
-              <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
-                <.icon name="hero-sparkles" class="size-4 text-primary" />
-              </div>
+        </header>
+        <div class={[
+          "grid items-start gap-7",
+          @creation_mode == :ai && @action == :new && "xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
+        ]}>
+          <section
+            :if={@action == :new && @creation_mode == :ai}
+            class="surface space-y-5 p-5 sm:p-6 xl:order-2"
+            aria-label="Recipe assistant"
+          >
+            <div class="flex items-center gap-3">
+              <span class="flex size-11 items-center justify-center rounded-xl bg-lavender text-lavender-ink">
+                <.icon name="hero-sparkles" class="size-6" />
+              </span>
               <div>
-                <p class="text-sm font-semibold text-base-content">AI Recipe Assistant</p>
-                <p class="text-xs text-primary">Ready to help</p>
+                <h2 class="text-xl">A little kitchen inspiration</h2>
+                <p class="text-sm text-muted">Describe it, link it, or snap a photo.</p>
               </div>
             </div>
-
-            <%!-- Chat messages (always shown, flex-1, scrollable) --%>
             <div
-              id="desktop-chat-messages"
-              class="flex-1 min-h-0 overflow-y-auto p-4 space-y-3"
+              id="assistant-messages"
+              phx-update="stream"
               phx-hook="ScrollToBottom"
+              class="max-h-72 space-y-3 overflow-y-auto"
             >
-              <%!-- Empty state when no messages --%>
-              <div :if={@messages == [] && @creation_mode == :manual} class="h-full flex flex-col items-center justify-center gap-3 text-center py-8">
-                <div class="w-12 h-12 rounded-xl bg-base-200 flex items-center justify-center">
-                  <.icon name="hero-sparkles" class="size-6 text-base-content/20" />
-                </div>
-                <p class="text-sm text-base-content/40">Switch to <strong class="text-primary font-medium">Describe with AI</strong> or <strong class="text-primary font-medium">Import URL</strong> to use the AI assistant.</p>
-              </div>
-
-              <div :if={@messages == [] && @creation_mode == :ai} class="h-full flex flex-col items-center justify-center gap-3 text-center py-8">
-                <div class="w-12 h-12 rounded-xl bg-base-200 flex items-center justify-center">
-                  <.icon name="hero-sparkles" class="size-6 text-primary/40" />
-                </div>
-                <p class="text-sm text-base-content/40">Describe a recipe or paste a URL to get started.</p>
-              </div>
-
-              <%!-- Message history --%>
-              <div
-                :for={msg <- @messages}
-                class={["flex gap-2", if(msg.role == :user, do: "justify-end", else: "")]}
+              <p
+                :for={{id, msg} <- @streams.messages}
+                id={id}
+                class={[
+                  "rounded-2xl p-3.5 text-sm leading-relaxed",
+                  if(msg.role == :user, do: "ml-5 bg-tag", else: "mr-5 bg-lavender text-lavender-ink")
+                ]}
               >
-                <div
-                  :if={msg.role == :assistant}
-                  class="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
-                >
-                  <.icon name="hero-sparkles" class="size-3.5 text-primary" />
-                </div>
-                <div class={[
-                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                  if(msg.role == :user,
-                    do: "bg-primary text-primary-content rounded-tr-sm",
-                    else: "bg-base-200 text-base-content rounded-tl-sm"
-                  )
-                ]}>
-                  {msg.content}
-                </div>
-              </div>
-
-              <%!-- Suggestion cards --%>
-              <div :if={@ui_state == :picking_suggestion} class="space-y-2 mt-2">
-                <button
-                  :for={{suggestion, index} <- Enum.with_index(@ai_suggestions)}
-                  phx-click="pick_suggestion"
-                  phx-value-index={index}
-                  class="w-full text-left rounded-xl border border-base-300/50 bg-base-200/60 hover:bg-base-200 hover:border-primary/30 p-3 transition-all group"
-                >
-                  <div class="font-medium text-sm group-hover:text-primary transition-colors">{suggestion["title"]}</div>
-                  <div class="text-xs text-base-content/50 mt-0.5 line-clamp-2">{suggestion["description"]}</div>
-                </button>
-              </div>
-
-              <%!-- Loading indicator --%>
-              <div :if={@ui_state == :loading} class="flex items-center gap-2 pl-9">
-                <div class="bg-base-200 rounded-2xl rounded-tl-sm px-3.5 py-2.5">
-                  <span class="loading loading-dots loading-xs text-primary"></span>
-                </div>
-              </div>
+                {msg.content}
+              </p>
             </div>
-
-            <%!-- Input (always shown, pinned to bottom, content adapts by state) --%>
-            <div class="border-t border-base-300/50 p-3 shrink-0">
-              <%= cond do %>
-                <% @ui_state == :picking_suggestion -> %>
-                  <button
-                    phx-click="back_to_input"
-                    class="w-full text-center text-sm text-base-content/40 hover:text-base-content transition-colors py-1"
-                  >
-                    None of these — try a different description
-                  </button>
-
-                <% @ui_state == :recipe_ready || @creation_mode == :manual && @ui_state == :recipe_ready -> %>
-                  <form phx-submit="ai_refine" class="flex gap-2">
-                    <div class="flex-1 relative">
-                      <div :if={@ai_loading} class="absolute right-2 top-1/2 -translate-y-1/2">
-                        <span class="loading loading-spinner loading-xs text-primary"></span>
-                      </div>
-                      <input
-                        type="text"
-                        name="refine_input"
-                        placeholder="Ask anything about this recipe..."
-                        class="w-full input input-sm pr-8"
-                        disabled={@ai_loading}
-                        autocomplete="off"
-                      />
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-sm" disabled={@ai_loading}>
-                      <.icon name="hero-paper-airplane" class="size-4" />
-                    </button>
-                  </form>
-
-                <% @ui_state == :loading -> %>
-                  <div class="flex gap-2">
-                    <input type="text" disabled placeholder="Generating..." class="flex-1 input input-sm opacity-40" />
-                    <button disabled class="btn btn-primary btn-sm opacity-40">
-                      <.icon name="hero-sparkles" class="size-4" />
-                    </button>
-                  </div>
-
-                <% @creation_mode == :manual -> %>
-                  <p class="text-xs text-center text-base-content/30 py-1">Switch to AI mode to use the assistant</p>
-
-                <% true -> %>
-                  <form
-                    id="creator-form-desktop"
-                    phx-submit="ai_submit"
-                    phx-change="validate-upload"
-                    class="space-y-2"
-                  >
-                    <div :if={@ai_error} class="flex items-center gap-1.5 text-xs text-error">
-                      <.icon name="hero-exclamation-circle" class="size-3.5 shrink-0" />
-                      {@ai_error}
-                    </div>
-                    <div :for={entry <- @uploads.recipe_image.entries} class="flex items-center gap-2 p-2 bg-base-200 rounded-lg">
-                      <.live_img_preview entry={entry} class="w-10 h-10 object-cover rounded-md" />
-                      <span class="text-xs flex-1 truncate text-base-content/70">{entry.client_name}</span>
-                      <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="text-base-content/30 hover:text-error transition-colors">
-                        <.icon name="hero-x-mark" class="size-4" />
-                      </button>
-                    </div>
-                    <div class="flex gap-2 items-end">
-                      <textarea
-                        name="ai_input"
-                        phx-keyup="ai_validate"
-                        rows="2"
-                        placeholder="Describe a recipe or paste a URL..."
-                        class="flex-1 textarea textarea-bordered textarea-sm resize-none text-sm"
-                        autocomplete="off"
-                      >{@ai_input_text}</textarea>
-                      <div class="flex flex-col gap-1">
-                        <label class="btn btn-ghost btn-sm btn-square cursor-pointer text-base-content/40 hover:text-base-content" title="Upload a photo">
-                          <.icon name="hero-photo" class="size-4" />
-                          <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload-desktop" />
-                        </label>
-                        <button type="submit" class="btn btn-primary btn-sm btn-square">
-                          <.icon name="hero-sparkles" class="size-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                  <div class="flex flex-wrap gap-1.5 mt-2">
-                    <button
-                      :for={suggestion <- suggestions()}
-                      type="button"
-                      phx-click="use_suggestion"
-                      phx-value-text={suggestion}
-                      class="px-2.5 py-1 rounded-full text-xs border border-base-300/50 bg-base-200/40 text-base-content/60 hover:bg-base-200 hover:text-base-content transition-all"
-                    >
-                      {suggestion}
-                    </button>
-                  </div>
-              <% end %>
-            </div>
-
-          </div>
-
-        </div>
-      </div>
-    <% end %>
-    """
-  end
-
-  # ── State 1: Creator Input (mobile) ──
-
-  defp creator_input(assigns) do
-    ~H"""
-    <div class="flex flex-col items-center justify-center min-h-[60vh]">
-      <div class="w-full max-w-xl mx-auto text-center space-y-6">
-        <%!-- Hero heading --%>
-        <div class="space-y-2">
-          <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">
-            What would you like to cook?
-          </h1>
-          <p class="text-base-content/60 text-sm sm:text-base">
-            Describe a recipe, paste a URL, or upload a photo
-          </p>
-        </div>
-
-        <%!-- Input card --%>
-        <form
-          id="creator-form"
-          phx-submit="ai_submit"
-          phx-change="validate-upload"
-          class="rounded-2xl border border-base-300/50 bg-base-200/60 backdrop-blur-sm shadow-sm overflow-hidden"
-        >
-          <%!-- Upload preview --%>
-          <div
-            :for={entry <- @uploads.recipe_image.entries}
-            class="flex items-center gap-3 px-4 pt-4"
-          >
-            <.live_img_preview entry={entry} class="w-12 h-12 object-cover rounded-lg" />
-            <span class="text-sm flex-1 truncate text-base-content/70">{entry.client_name}</span>
-            <button
-              type="button"
-              phx-click="cancel-upload"
-              phx-value-ref={entry.ref}
-              class="text-base-content/40 hover:text-error transition-colors"
+            <p
+              :if={@ai_loading}
+              role="status"
+              class="rounded-xl bg-butter p-3 text-sm text-butter-ink"
             >
-              <.icon name="hero-x-mark" class="size-5" />
-            </button>
-          </div>
-
-          <%!-- Textarea --%>
-          <div class="p-4 pb-0">
-            <textarea
-              name="ai_input"
-              phx-keyup="ai_validate"
-              rows="3"
-              placeholder="Describe a recipe, paste a URL, or upload a photo..."
-              class="w-full bg-transparent border-0 focus:ring-0 resize-none text-base placeholder:text-base-content/30 p-0"
-              autocomplete="off"
-            >{@ai_input_text}</textarea>
-          </div>
-
-          <%!-- Card footer --%>
-          <div class="flex items-center justify-between px-4 py-3 border-t border-base-300/30">
-            <%!-- Photo upload --%>
-            <label class="btn btn-ghost btn-sm btn-circle cursor-pointer text-base-content/50 hover:text-base-content">
-              <.icon name="hero-photo" class="size-5" />
-              <.live_file_input upload={@uploads.recipe_image} class="hidden" id="recipe-image-upload" />
-            </label>
-
-            <button
-              type="submit"
-              class="btn btn-primary btn-sm gap-1.5 px-5"
+              Working on something good…
+            </p>
+            <p
+              :if={@ai_error}
+              id="ai-error"
+              role="alert"
+              class="rounded-xl bg-blush p-3 text-sm text-blush-ink"
             >
-              <.icon name="hero-sparkles" class="size-4" />
-              Generate
-            </button>
-          </div>
-        </form>
-
-        <%!-- Error --%>
-        <div
-          :if={@ai_error}
-          class="alert alert-error shadow-sm"
-        >
-          <.icon name="hero-exclamation-triangle" class="size-5 shrink-0" />
-          <span>{@ai_error}</span>
-          <button type="button" phx-click="dismiss_error" class="btn btn-ghost btn-xs btn-circle">
-            <.icon name="hero-x-mark" class="size-4" />
-          </button>
-        </div>
-
-        <%!-- Suggestion chips --%>
-        <div class="flex flex-wrap justify-center gap-2">
-          <button
-            :for={suggestion <- suggestions()}
-            type="button"
-            phx-click="use_suggestion"
-            phx-value-text={suggestion}
-            class="px-4 py-2 rounded-full text-sm border border-base-300/50 bg-base-200/40 text-base-content/70 hover:bg-base-200 hover:text-base-content hover:border-base-300 transition-all duration-200 cursor-pointer"
-          >
-            {suggestion}
-          </button>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  # ── State 2: Loading (mobile) ──
-
-  defp loading_state(assigns) do
-    ~H"""
-    <div class="flex flex-col items-center justify-center min-h-[60vh]">
-      <div class="w-full max-w-md mx-auto text-center">
-        <div class="rounded-2xl border border-base-300/50 bg-base-200/60 backdrop-blur-sm p-10 space-y-5">
-          <div class="flex justify-center">
-            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center animate-pulse">
-              <.icon name="hero-sparkles" class="size-8 text-primary" />
+              {@ai_error}
+            </p>
+            <div :if={@ai_suggestions != []} id="recipe-suggestions" class="space-y-2">
+              <button
+                :for={{idea, i} <- Enum.with_index(@ai_suggestions)}
+                phx-click="pick_suggestion"
+                phx-value-index={i}
+                disabled={@ai_loading}
+                class="surface min-h-11 w-full space-y-1 p-4 text-left transition-colors hover:border-strong"
+              >
+                <span class="block font-heading font-semibold">{idea["title"]}</span><span class="block text-sm text-muted">{idea["description"]}</span>
+              </button>
             </div>
-          </div>
-          <p class="text-base-content/70 font-medium">{@message}</p>
-          <span class="loading loading-dots loading-md text-primary"></span>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  # ── State 3: Suggestion Picker (mobile) ──
-
-  defp suggestion_picker(assigns) do
-    ~H"""
-    <div class="flex flex-col items-center justify-center min-h-[60vh]">
-      <div class="w-full max-w-xl mx-auto space-y-6">
-        <div class="text-center space-y-2">
-          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">
-            Pick a recipe
-          </h1>
-          <p class="text-base-content/60 text-sm">
-            Based on "<span class="italic">{@ai_input_text}</span>"
-          </p>
-        </div>
-
-        <div class="space-y-3">
-          <button
-            :for={{suggestion, index} <- Enum.with_index(@suggestions)}
-            phx-click="pick_suggestion"
-            phx-value-index={index}
-            class="w-full text-left rounded-xl border border-base-300/50 bg-base-200/60 hover:bg-base-200 hover:border-primary/30 p-5 transition-all duration-200 group"
-          >
-            <div class="flex items-start gap-4">
-              <div class="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary shrink-0 mt-0.5 group-hover:bg-primary/20 transition-colors">
-                <.icon name="hero-sparkles" class="size-5" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <h3 class="font-semibold text-base group-hover:text-primary transition-colors">
-                  {suggestion["title"]}
-                </h3>
-                <p class="text-sm text-base-content/60 mt-1 leading-relaxed">
-                  {suggestion["description"]}
+            <.form
+              for={@ai_form}
+              id="creator-form"
+              phx-submit="ai_submit"
+              phx-change="validate-upload"
+              class="space-y-3"
+            >
+              <.input
+                field={@ai_form[:ai_input]}
+                type="textarea"
+                aria-label="Describe a recipe or paste a link"
+                placeholder={
+                  if @input_kind == "url",
+                    do: "Paste a recipe link…",
+                    else: "What would you like to cook?"
+                }
+                rows="3"
+                disabled={@ai_loading}
+                class="field min-h-28 resize-y"
+              /><label class="block text-sm font-bold" for={@uploads.recipe_image.ref}>
+                Or upload a recipe photo
+              </label>
+              <.live_file_input upload={@uploads.recipe_image} class="field text-sm" />
+              <p
+                :for={error <- upload_errors(@uploads.recipe_image)}
+                role="alert"
+                class="text-sm text-blush-ink"
+              >
+                Upload error: {error}
+              </p>
+              <div :for={entry <- @uploads.recipe_image.entries} class="flex items-center gap-3">
+                <.live_img_preview entry={entry} class="size-12 rounded-xl object-cover" /><span class="min-w-0 flex-1 truncate text-sm">
+                  {entry.client_name}
+                </span><button
+                  phx-click="cancel-upload"
+                  phx-value-ref={entry.ref}
+                  type="button"
+                  aria-label="Remove photo"
+                  class="action size-11 !p-0"
+                ><.icon name="hero-x-mark" class="size-5" /></button>
+                <p
+                  :for={error <- upload_errors(@uploads.recipe_image, entry)}
+                  class="text-sm text-blush-ink"
+                >
+                  {error}
                 </p>
               </div>
-              <.icon name="hero-chevron-right" class="size-5 text-base-content/20 group-hover:text-primary/60 shrink-0 mt-2.5 transition-colors" />
+              <button type="submit" disabled={@ai_loading} class="action action-primary w-full">
+                {if @ai_loading, do: "Working…", else: "Find my recipe"}
+              </button>
+            </.form>
+            <div :if={!@recipe_ready?} class="flex flex-wrap gap-2">
+              <button
+                :for={suggestion <- suggestions()}
+                phx-click="use_suggestion"
+                phx-value-text={suggestion}
+                class="min-h-11 rounded-xl border border-base-300 px-3 py-2 text-left text-xs text-secondary-ink hover:bg-tag"
+              >
+                {suggestion}
+              </button>
             </div>
-          </button>
-        </div>
-
-        <div class="text-center">
-          <button
-            phx-click="back_to_input"
-            class="text-sm text-base-content/50 hover:text-base-content transition-colors"
-          >
-            None of these &mdash; try a different description
-          </button>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  # ── State 4: Recipe Ready (mobile) ──
-
-  defp recipe_ready_state(assigns) do
-    ~H"""
-    <div class="max-w-2xl mx-auto pb-24">
-      <%!-- AI feedback card --%>
-      <div
-        :if={@ai_feedback}
-        class="mb-4 flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3"
-      >
-        <.icon name="hero-sparkles" class="size-5 text-primary shrink-0" />
-        <span class="flex-1 text-sm text-base-content/80">{@ai_feedback}</span>
-        <button type="button" phx-click="dismiss_feedback" class="btn btn-ghost btn-xs btn-circle">
-          <.icon name="hero-x-mark" class="size-4" />
-        </button>
-      </div>
-
-      <.recipe_form form={@form} action={@action} recipe={@recipe} tags_input={@tags_input} uploads={@uploads} unit_system={@unit_system} />
-    </div>
-
-    <%!-- Sticky AI refinement bar --%>
-    <div class="fixed bottom-0 inset-x-0 z-30 bg-base-200/80 backdrop-blur-lg border-t border-base-300/50">
-      <div class="max-w-2xl mx-auto px-4 py-3">
-        <form phx-submit="ai_refine" class="flex items-center gap-3">
-          <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
-            <%= if @ai_loading do %>
-              <span class="loading loading-spinner loading-sm text-primary"></span>
-            <% else %>
-              <.icon name="hero-sparkles" class="size-5 text-primary" />
-            <% end %>
-          </div>
-          <input
-            type="text"
-            name="refine_input"
-            placeholder="Ask AI to refine — e.g. &quot;make it spicier&quot;, &quot;reduce to 2 servings&quot;..."
-            class="flex-1 input input-bordered input-sm h-10 bg-base-100/50"
-            autocomplete="off"
-            disabled={@ai_loading}
-          />
-          <button
-            type="submit"
-            class="btn btn-primary btn-sm h-10 px-4"
-            disabled={@ai_loading}
-          >
-            Send
-          </button>
-        </form>
-      </div>
-    </div>
-    """
-  end
-
-  # ── Recipe Form Component ──
-
-  defp recipe_form(assigns) do
-    assigns = assign_new(assigns, :form_id, fn -> "recipe-form" end)
-    ~H"""
-    <.form for={@form} id={@form_id} phx-change="validate" phx-submit="save" class="space-y-6">
-      <%!-- Basic info card --%>
-      <div class="rounded-xl border border-base-300/50 bg-base-200 p-6 space-y-4">
-        <h3 class="font-semibold text-base flex items-center gap-2">
-          <.icon name="hero-document-text" class="size-5 text-primary/70" />
-          Basic Information
-        </h3>
-        <.input field={@form[:title]} type="text" label="Title" required />
-        <.input field={@form[:description]} type="textarea" label="Description" />
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <.input field={@form[:servings]} type="number" label="Servings" />
-          <.input field={@form[:prep_time_minutes]} type="number" label="Prep time (min)" />
-          <.input field={@form[:cook_time_minutes]} type="number" label="Cook time (min)" />
-        </div>
-      </div>
-
-      <%!-- Ingredients card --%>
-      <div class="rounded-xl border border-base-300/50 bg-base-200 p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-base flex items-center gap-2">
-            <.icon name="hero-list-bullet" class="size-5 text-primary/70" />
-            Ingredients
-          </h3>
-          <button type="button" phx-click="add_ingredient" class="btn btn-ghost btn-xs gap-1 text-primary">
-            <.icon name="hero-plus" class="size-3.5" />
-            Add Ingredient
-          </button>
-        </div>
-        <div class="space-y-2">
-          <.inputs_for :let={ing_form} field={@form[:ingredients]}>
-            <input type="hidden" name="recipe[ingredients_sort][]" value={ing_form.index} />
-            <div class="group flex flex-wrap sm:flex-nowrap gap-2 items-end p-3 rounded-lg bg-base-100/40 hover:bg-base-100/70 transition-colors">
-              <div class="w-[calc(50%-0.25rem)] sm:w-20">
-                <.input field={ing_form[:quantity]} type="text" placeholder="Qty" />
-              </div>
-              <div class="w-[calc(50%-0.25rem)] sm:w-24">
-                <.input field={ing_form[:unit]} type="select" options={Cookbook.Recipes.Ingredient.unit_options(@unit_system)} />
-              </div>
-              <div class="flex-1 min-w-0">
-                <.input field={ing_form[:name]} type="text" placeholder="Ingredient name" />
-              </div>
-              <input type="hidden" name="recipe[ingredients_drop][]" />
-              <label class="cursor-pointer opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                <input
-                  type="checkbox"
-                  name="recipe[ingredients_drop][]"
-                  value={ing_form.index}
-                  class="hidden"
-                />
-                <span class="flex items-center gap-1 justify-center h-8 px-2 rounded-lg hover:bg-error/10 text-base-content/30 hover:text-error transition-colors text-xs whitespace-nowrap">
-                  <.icon name="hero-trash" class="size-4" />
-                  <span class="hidden sm:inline">Remove</span>
-                </span>
-              </label>
-            </div>
-          </.inputs_for>
-        </div>
-        <input type="hidden" name="recipe[ingredients_drop][]" />
-        <div :if={@form[:ingredients].value == [] || @form[:ingredients].value == nil} class="text-center py-6 text-base-content/40 text-sm">
-          No ingredients yet. Click "Add Ingredient" to start.
-        </div>
-      </div>
-
-      <%!-- Steps card --%>
-      <div class="rounded-xl border border-base-300/50 bg-base-200 p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-base flex items-center gap-2">
-            <.icon name="hero-queue-list" class="size-5 text-primary/70" />
-            Instructions
-          </h3>
-          <button type="button" phx-click="add_step" class="btn btn-ghost btn-xs gap-1 text-primary">
-            <.icon name="hero-plus" class="size-3.5" />
-            Add Step
-          </button>
-        </div>
-        <div class="space-y-4">
-          <.inputs_for :let={step_form} field={@form[:steps]}>
-            <input type="hidden" name="recipe[steps_sort][]" value={step_form.index} />
-            <div class="group rounded-xl border border-base-300/30 bg-base-100/30 p-4 space-y-3">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <div class="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-content text-sm font-bold shrink-0">
-                    {step_form.index + 1}
-                  </div>
-                  <span class="text-sm font-medium text-base-content/60">Step {step_form.index + 1}</span>
-                </div>
-                <input type="hidden" name="recipe[steps_drop][]" />
-                <label class="cursor-pointer opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                  <input
-                    type="checkbox"
-                    name="recipe[steps_drop][]"
-                    value={step_form.index}
-                    class="hidden"
-                  />
-                  <span class="flex items-center gap-1 justify-center h-8 px-2 rounded-lg hover:bg-error/10 text-base-content/30 hover:text-error transition-colors text-xs whitespace-nowrap">
-                    <.icon name="hero-trash" class="size-4" />
-                    <span class="hidden sm:inline">Remove</span>
-                  </span>
-                </label>
-              </div>
+            <.form
+              :if={@recipe_ready?}
+              for={@refine_form}
+              id="refine-form"
+              phx-submit="ai_refine"
+              class="space-y-3 border-t border-base-300 pt-4"
+            >
               <.input
-                field={step_form[:instruction]}
-                type="textarea"
-                placeholder="Describe this step..."
-                class="w-full textarea min-h-[80px]"
-              />
-              <div class="flex items-center gap-2">
-                <.icon name="hero-clock" class="size-4 text-base-content/40 shrink-0" />
-                <div class="w-20">
-                  <.input field={step_form[:duration_minutes]} type="number" placeholder="0" />
+                field={@refine_form[:refine_input]}
+                label="Want to change something?"
+                placeholder="Make it spicier, or serve four…"
+                disabled={@ai_loading}
+                class="field"
+              /><button class="action w-full" type="submit" disabled={@ai_loading}>
+                Refine recipe
+              </button>
+            </.form>
+          </section>
+          <section
+            :if={@action == :edit || @creation_mode == :manual || @recipe_ready?}
+            class="min-w-0 xl:order-1"
+          >
+            <.form
+              for={@form}
+              id="recipe-form"
+              phx-change="validate"
+              phx-submit="save"
+              class="space-y-5"
+            >
+              <section class="surface space-y-4 p-5 sm:p-6">
+                <h2 class="text-xl">The recipe</h2>
+                <.input field={@form[:title]} label="Title" required /><.input
+                  field={@form[:description]}
+                  type="textarea"
+                  label="Description"
+                />
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <.input field={@form[:servings]} type="number" min="1" label="Servings" /><.input
+                    field={@form[:prep_time_minutes]}
+                    type="number"
+                    min="0"
+                    label="Prep time (min)"
+                  /><.input
+                    field={@form[:cook_time_minutes]}
+                    type="number"
+                    min="0"
+                    label="Cook time (min)"
+                  />
                 </div>
-                <span class="text-sm text-base-content/50">minutes</span>
+              </section>
+              <section class="surface space-y-4 p-5 sm:p-6">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <h2 class="text-xl">Ingredients</h2>
+                  <button id="add-ingredient" type="button" phx-click="add_ingredient" class="action">
+                    <.icon name="hero-plus" class="size-4" />Add ingredient
+                  </button>
+                </div>
+                <.inputs_for :let={ing} field={@form[:ingredients]}>
+                  <input type="hidden" name="recipe[ingredients_sort][]" value={ing.index} />
+                  <div class="space-y-3 rounded-2xl bg-tag p-3">
+                    <.input
+                      field={ing[:name]}
+                      label={"Ingredient #{ing.index + 1}"}
+                      placeholder="Ingredient name"
+                    />
+                    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px] items-end gap-2">
+                      <.input field={ing[:quantity]} label="Quantity" /><.input
+                        field={ing[:unit]}
+                        type="select"
+                        label="Unit"
+                        options={Ingredient.unit_options(@current_user.unit_system)}
+                      /><label
+                        class="flex size-11 cursor-pointer items-center justify-center rounded-xl hover:bg-blush"
+                        title="Remove ingredient"
+                      >
+                        <input
+                          type="checkbox"
+                          name="recipe[ingredients_drop][]"
+                          value={ing.index}
+                          class="peer sr-only"
+                          aria-label={"Remove ingredient #{ing.index + 1}"}
+                        /><span class="rounded p-1 peer-focus-visible:outline-2">
+                          <.icon name="hero-trash" class="size-5" />
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </.inputs_for>
+                <input type="hidden" name="recipe[ingredients_drop][]" />
+              </section>
+              <section class="surface space-y-4 p-5 sm:p-6">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <h2 class="text-xl">Method</h2>
+                  <button id="add-step" type="button" phx-click="add_step" class="action">
+                    <.icon name="hero-plus" class="size-4" />Add step
+                  </button>
+                </div>
+                <.inputs_for :let={step} field={@form[:steps]}>
+                  <input type="hidden" name="recipe[steps_sort][]" value={step.index} />
+                  <div class="space-y-3 rounded-2xl bg-tag p-4">
+                    <div class="flex items-center justify-between">
+                      <h3 class="text-lg">Step {step.index + 1}</h3>
+                      <label
+                        class="flex size-11 cursor-pointer items-center justify-center rounded-xl hover:bg-blush"
+                        title="Remove step"
+                      >
+                        <input
+                          type="checkbox"
+                          name="recipe[steps_drop][]"
+                          value={step.index}
+                          class="peer sr-only"
+                          aria-label={"Remove step #{step.index + 1}"}
+                        /><span class="rounded p-1 peer-focus-visible:outline-2">
+                          <.icon name="hero-trash" class="size-5" />
+                        </span>
+                      </label>
+                    </div>
+                    <.input
+                      field={step[:short_title]}
+                      label="Short title (optional)"
+                      placeholder="e.g. Start the rice"
+                    /><.input
+                      field={step[:instruction]}
+                      type="textarea"
+                      label="Instructions"
+                      rows="3"
+                    /><.input
+                      field={step[:duration_minutes]}
+                      type="number"
+                      min="0"
+                      label="Timer (minutes, optional)"
+                    />
+                  </div>
+                </.inputs_for>
+                <input type="hidden" name="recipe[steps_drop][]" />
+              </section>
+              <section class="surface space-y-4 p-5 sm:p-6">
+                <h2 class="text-xl">Make it yours</h2>
+                <.input
+                  name="recipe[tags_input]"
+                  value={@tags_input}
+                  id="recipe-tags"
+                  label="Tags (separated by commas)"
+                  placeholder="vegetarian, quick, comfort"
+                /><.input field={@form[:image_url]} type="url" label="Image URL" /><.input
+                  field={@form[:source_url]}
+                  type="url"
+                  label="Source URL"
+                /><.input field={@form[:notes]} type="textarea" label="Kitchen notes" />
+              </section>
+              <div class="flex flex-wrap gap-3">
+                <button type="submit" phx-disable-with="Saving…" class="action action-primary">
+                  Save recipe <.icon name="hero-check" class="size-4" />
+                </button><.link
+                  navigate={if @action == :edit, do: ~p"/recipes/#{@recipe.id}", else: ~p"/recipes"}
+                  class="action"
+                >Cancel</.link>
               </div>
-            </div>
-          </.inputs_for>
-        </div>
-        <input type="hidden" name="recipe[steps_drop][]" />
-        <div :if={@form[:steps].value == [] || @form[:steps].value == nil} class="text-center py-6 text-base-content/40 text-sm">
-          No steps yet. Click "Add Step" to start.
+            </.form>
+          </section>
+          <section
+            :if={@action == :new && @creation_mode == :ai && !@recipe_ready?}
+            class="flex min-h-64 flex-col items-center justify-center gap-4 rounded-[20px] border border-dashed border-strong p-8 text-center xl:order-1"
+          >
+            <span class="flex size-16 items-center justify-center rounded-2xl bg-butter text-butter-ink">
+              <.icon name="hero-book-open" class="size-8" />
+            </span>
+            <h2 class="text-xl">Your next favourite starts here</h2>
+            <p class="max-w-sm text-sm leading-relaxed text-muted">
+              Use the assistant to turn an idea, recipe link, or photo into something you can save and cook.
+            </p>
+          </section>
         </div>
       </div>
-
-      <%!-- Tags & media card --%>
-      <div class="rounded-xl border border-base-300/50 bg-base-200 p-6 space-y-4">
-        <h3 class="font-semibold text-base flex items-center gap-2">
-          <.icon name="hero-tag" class="size-5 text-primary/70" />
-          Tags & Media
-        </h3>
-        <div>
-          <label class="label mb-1">Tags (comma-separated)</label>
-          <input
-            type="text"
-            name="recipe[tags_input]"
-            value={@tags_input}
-            phx-blur="update_tags_input"
-            placeholder="e.g. italian, quick, vegetarian"
-            class="w-full input"
-          />
-        </div>
-        <.input field={@form[:image_url]} type="url" label="Image URL" />
-        <.input field={@form[:source_url]} type="url" label="Source URL" />
-        <.input field={@form[:notes]} type="textarea" label="Notes" />
-      </div>
-
-      <div class="flex gap-3">
-        <.button type="submit" variant="primary" phx-disable-with="Saving...">
-          <.icon name="hero-check" class="size-4 mr-1" />
-          Save Recipe
-        </.button>
-        <.button navigate={if @action == :edit, do: ~p"/recipes/#{@recipe.id}", else: ~p"/recipes"}>
-          Cancel
-        </.button>
-      </div>
-    </.form>
+    </Layouts.app>
     """
   end
 

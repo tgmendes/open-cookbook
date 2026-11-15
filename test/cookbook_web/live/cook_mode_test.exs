@@ -71,4 +71,26 @@ defmodule CookbookWeb.CookModeTest do
   test "short titles survive persistence", %{recipe: recipe} do
     assert hd(Recipes.get_recipe!(recipe.id).steps).short_title == "Chop carrots"
   end
+
+  test "prep derives equipment from the instructions without inventing it", %{
+    conn: conn,
+    recipe: recipe
+  } do
+    first = hd(recipe.steps)
+
+    {:ok, _} =
+      Recipes.update_recipe(recipe, %{
+        "steps" => [
+          %{
+            "id" => first.id,
+            "instruction" => "Chop carrots on a chopping board and add to a saucepan."
+          }
+        ]
+      })
+
+    {:ok, view, _} = live(conn, "/recipes/#{recipe.id}/cook")
+    assert has_element?(view, "#cook-equipment", "Chopping board")
+    assert has_element?(view, "#cook-equipment", "Saucepan")
+    refute has_element?(view, "#cook-equipment", "Baking tray")
+  end
 end

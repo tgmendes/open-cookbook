@@ -28,8 +28,16 @@ defmodule Cookbook.RecipesTest do
           "2" => %{"name" => "Eggs", "quantity" => "4", "unit" => "", "position" => "2"}
         },
         "steps" => %{
-          "0" => %{"instruction" => "Cook the pasta", "position" => "0", "duration_minutes" => "10"},
-          "1" => %{"instruction" => "Fry the guanciale", "position" => "1", "duration_minutes" => "5"},
+          "0" => %{
+            "instruction" => "Cook the pasta",
+            "position" => "0",
+            "duration_minutes" => "10"
+          },
+          "1" => %{
+            "instruction" => "Fry the guanciale",
+            "position" => "1",
+            "duration_minutes" => "5"
+          },
           "2" => %{"instruction" => "Mix everything together", "position" => "2"}
         }
       },
@@ -92,7 +100,9 @@ defmodule Cookbook.RecipesTest do
 
     test "filters by tag", %{user: user} do
       {:ok, _} = Recipes.create_recipe(recipe_attrs(user))
-      {:ok, _} = Recipes.create_recipe(recipe_attrs(user, %{"title" => "Sushi", "tags" => ["japanese"]}))
+
+      {:ok, _} =
+        Recipes.create_recipe(recipe_attrs(user, %{"title" => "Sushi", "tags" => ["japanese"]}))
 
       results = Recipes.list_recipes(user.id, tag: "japanese")
       assert length(results) == 1
@@ -103,7 +113,11 @@ defmodule Cookbook.RecipesTest do
   describe "list_tags/1" do
     test "returns unique tags for a user", %{user: user} do
       {:ok, _} = Recipes.create_recipe(recipe_attrs(user))
-      {:ok, _} = Recipes.create_recipe(recipe_attrs(user, %{"title" => "Sushi", "tags" => ["japanese", "quick"]}))
+
+      {:ok, _} =
+        Recipes.create_recipe(
+          recipe_attrs(user, %{"title" => "Sushi", "tags" => ["japanese", "quick"]})
+        )
 
       tags = Recipes.list_tags(user.id)
       assert "italian" in tags

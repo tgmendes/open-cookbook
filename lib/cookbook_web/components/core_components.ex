@@ -56,13 +56,13 @@ defmodule CookbookWeb.CoreComponents do
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class="fixed top-4 right-4 z-[80] w-[calc(100vw-32px)] max-w-sm"
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
+        "flex items-start gap-3 rounded-2xl border border-base-300 p-4 shadow-lg text-sm leading-relaxed",
+        @kind == :info && "bg-sky text-sky-ink",
+        @kind == :error && "bg-blush text-blush-ink"
       ]}>
         <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
         <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
@@ -71,7 +71,11 @@ defmodule CookbookWeb.CoreComponents do
           <p>{msg}</p>
         </div>
         <div class="flex-1" />
-        <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
+        <button
+          type="button"
+          class="group -m-2 flex size-11 shrink-0 items-center justify-center rounded-xl"
+          aria-label={gettext("close")}
+        >
           <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
         </button>
       </div>
@@ -95,11 +99,11 @@ defmodule CookbookWeb.CoreComponents do
   slot :inner_block, required: true
 
   def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
+    variants = %{"primary" => "action-primary", nil => ""}
 
     assigns =
       assign_new(assigns, :class, fn ->
-        ["btn", Map.fetch!(variants, assigns[:variant])]
+        ["action", Map.fetch!(variants, assigns[:variant])]
       end)
 
     if rest[:href] || rest[:navigate] || rest[:patch] do
@@ -206,8 +210,8 @@ defmodule CookbookWeb.CoreComponents do
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
-      <label>
+    <div class="space-y-1">
+      <label class="block">
         <input
           type="hidden"
           name={@name}
@@ -215,14 +219,14 @@ defmodule CookbookWeb.CoreComponents do
           disabled={@rest[:disabled]}
           form={@rest[:form]}
         />
-        <span class="label">
+        <span class="flex min-h-11 items-center gap-3 text-sm">
           <input
             type="checkbox"
             id={@id}
             name={@name}
             value="true"
             checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
+            class={@class || "size-6 rounded-lg border-2 border-checkbox accent-primary"}
             {@rest}
           />{@label}
         </span>
@@ -234,13 +238,13 @@ defmodule CookbookWeb.CoreComponents do
 
   def input(%{type: "select"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
-      <label>
-        <span :if={@label} class="label mb-1">{@label}</span>
+    <div class="space-y-1">
+      <label class="block">
+        <span :if={@label} class="mb-1.5 block text-sm font-bold">{@label}</span>
         <select
           id={@id}
           name={@name}
-          class={[@class || "w-full select", @errors != [] && (@error_class || "select-error")]}
+          class={[@class || "field", @errors != [] && (@error_class || "!border-blush-ink")]}
           multiple={@multiple}
           {@rest}
         >
@@ -255,15 +259,15 @@ defmodule CookbookWeb.CoreComponents do
 
   def input(%{type: "textarea"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
-      <label>
-        <span :if={@label} class="label mb-1">{@label}</span>
+    <div class="space-y-1">
+      <label class="block">
+        <span :if={@label} class="mb-1.5 block text-sm font-bold">{@label}</span>
         <textarea
           id={@id}
           name={@name}
           class={[
-            @class || "w-full textarea",
-            @errors != [] && (@error_class || "textarea-error")
+            @class || "field min-h-24 resize-y",
+            @errors != [] && (@error_class || "!border-blush-ink")
           ]}
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
@@ -276,17 +280,17 @@ defmodule CookbookWeb.CoreComponents do
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
-    <div class="fieldset mb-2">
-      <label>
-        <span :if={@label} class="label mb-1">{@label}</span>
+    <div class="space-y-1">
+      <label class="block">
+        <span :if={@label} class="mb-1.5 block text-sm font-bold">{@label}</span>
         <input
           type={@type}
           name={@name}
           id={@id}
           value={Phoenix.HTML.Form.normalize_value(@type, @value)}
           class={[
-            @class || "w-full input",
-            @errors != [] && (@error_class || "input-error")
+            @class || "field",
+            @errors != [] && (@error_class || "!border-blush-ink")
           ]}
           {@rest}
         />
@@ -299,7 +303,7 @@ defmodule CookbookWeb.CoreComponents do
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
-    <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
+    <p class="mt-1.5 flex gap-2 items-center text-sm text-blush-ink">
       <.icon name="hero-exclamation-circle" class="size-5" />
       {render_slot(@inner_block)}
     </p>
@@ -315,12 +319,15 @@ defmodule CookbookWeb.CoreComponents do
 
   def header(assigns) do
     ~H"""
-    <header class={[@actions != [] && "flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6", "pb-4"]}>
+    <header class={[
+      @actions != [] && "flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6",
+      "pb-4"
+    ]}>
       <div>
-        <h1 class="text-xl font-bold leading-8 text-base-content">
+        <h1 class="text-3xl leading-tight text-base-content sm:text-4xl">
           {render_slot(@inner_block)}
         </h1>
-        <p :if={@subtitle != []} class="text-sm text-base-content/60 mt-0.5">
+        <p :if={@subtitle != []} class="mt-2 text-sm text-muted">
           {render_slot(@subtitle)}
         </p>
       </div>

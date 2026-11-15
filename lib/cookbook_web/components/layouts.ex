@@ -102,7 +102,9 @@ defmodule CookbookWeb.Layouts do
           :if={@current_user && !@immersive}
           class="flex items-center justify-between px-5 pt-4 lg:hidden"
         >
-          <.link navigate="/" class="font-heading font-semibold">Open Cookbook</.link>
+          <.link navigate="/" class="inline-flex min-h-11 items-center font-heading font-semibold">
+            Open Cookbook
+          </.link>
           <.link
             navigate="/settings"
             class="flex size-11 items-center justify-center rounded-xl hover:bg-base-200"

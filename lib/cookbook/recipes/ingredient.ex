@@ -4,7 +4,18 @@ defmodule Cookbook.Recipes.Ingredient do
 
   @metric_units ["g", "kg", "ml", "l"]
   @imperial_units ["cup", "tbsp", "tsp", "oz", "lb"]
-  @universal_units ["", "piece", "clove", "slice", "bunch", "pinch", "sprig", "can", "strip", "handful"]
+  @universal_units [
+    "",
+    "piece",
+    "clove",
+    "slice",
+    "bunch",
+    "pinch",
+    "sprig",
+    "can",
+    "strip",
+    "handful"
+  ]
 
   @units @universal_units ++ @metric_units ++ @imperial_units
 
