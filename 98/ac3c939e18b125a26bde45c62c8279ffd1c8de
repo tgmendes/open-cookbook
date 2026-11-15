@@ -1,0 +1,52 @@
+assets/js/app.js
+  h_2620cc60cfd1e9 84-85
+lib/cookbook/recipes/ingredient.ex
+  h_2620cc60cfd1e9 7-18
+lib/cookbook/recipes/recipe.ex
+  h_2620cc60cfd1e9 21-25,34-44,48-57
+lib/cookbook_web.ex
+  h_2620cc60cfd1e9 53
+lib/cookbook_web/components/core_components.ex
+  h_2620cc60cfd1e9 59,63-65,74-78,102,106,213-214,222,229,241-243,247,262-264,269-270,283-285,292-293,306,322-325,327,330
+lib/cookbook_web/components/layouts.ex
+  h_2620cc60cfd1e9 105-107
+lib/cookbook_web/live/cook_mode_live.ex
+  h_2620cc60cfd1e9 138-155,164,308-323,358-359,403,405,428-429
+lib/cookbook_web/live/dashboard_live.ex
+  h_2620cc60cfd1e9 3,6,8-9,11-17,20-27,32-34,36-38,40-41,43-46,48-57,59-64,66-80,82-84,87-121,123-128,130-132,134-140,143-146,148-149
+lib/cookbook_web/live/login_live.ex
+  h_2620cc60cfd1e9 3,10-15,23-33,36,39,44-50,52-54,56-59,61-80,82-90,92-93,95,98-110,112,115
+lib/cookbook_web/live/planner_live.ex
+  h_2620cc60cfd1e9 187-193,212-213,231-232,371,437-438
+lib/cookbook_web/live/recipe_form_live.ex
+  h_2620cc60cfd1e9 3-4,14,16-19,21-51,54-55,57-58,60-61,63-64,67-68,71,74-75,77-84,86-87,90-91,93-95,97-99,101-102,106-110,112-118,121-122,124,126-128,133-134,137,140-142,146-147,149-152,154-159,161-163,166-167,169,171,174-175,178,192,194,196-201,205-212,214-219,222-228,230,232,236,239-253,255-259,261,266-274,276-277,279-284,286-288,292-293,296-300,304-305,307,309-322,324-325,329-330,332,334-340,342-343,345-348,350-356,358-369,371-415,418-430,432-452,454-466,468-517,519-527,529-565,567-588,590-603,606
+lib/cookbook_web/live/recipe_list_live.ex
+  h_2620cc60cfd1e9 29,139-140,152-158,202,232-234,263,331-332,336-338
+lib/cookbook_web/live/recipe_show_live.ex
+  h_2620cc60cfd1e9 4,9-25,28,33-34,36,38-41,43-45,47,49-52,55,59-80,85-100,102-113,115,118-121,124-128,130-136,138-158,160-165,167-169,171-173,176-185,188,190-210,212-222,224-229,232-233,235,237-249,251
+lib/cookbook_web/live/shopping_list_live.ex
+  h_2620cc60cfd1e9 112-118,122-126,230-231
+priv/repo/migrations/20260223103100_create_recipes.exs
+  h_2620cc60cfd1e9 5-6
+priv/repo/migrations/20260223103200_create_meal_plans.exs
+  h_2620cc60cfd1e9 20-23
+test/cookbook/recipes_test.exs
+  h_2620cc60cfd1e9 31-40,103-105,116-120
+test/cookbook_web/live/cook_mode_test.exs
+  h_2620cc60cfd1e9 74-95
+test/cookbook_web/live/recipe_list_test.exs
+  h_2620cc60cfd1e9 33
+test/cookbook_web/live/remaining_pages_test.exs
+  h_2620cc60cfd1e9 1-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "98ac3c939e18b125a26bde45c62c8279ffd1c8de",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
