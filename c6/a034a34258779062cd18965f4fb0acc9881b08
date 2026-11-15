@@ -1,0 +1,18 @@
+lib/cookbook/recipes.ex
+  h_2620cc60cfd1e9 32-43
+lib/cookbook_web/live/recipe_list_live.ex
+  h_2620cc60cfd1e9 3,6,10,13-21,25-33,35-43,45-47,50-68,71-81,85-90,92-97,99-100,102,104-106,108-113,115-122,124-136,138-192,194-195,197-354,356-366,368
+test/cookbook_web/live/recipe_list_test.exs
+  h_2620cc60cfd1e9 1-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6a034a34258779062cd18965f4fb0acc9881b08",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
