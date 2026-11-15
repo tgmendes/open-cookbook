@@ -1,0 +1,26 @@
+lib/cookbook/planner.ex
+  h_2620cc60cfd1e9 50,140-145,149,153-154,160-188
+lib/cookbook/planner/meal_plan.ex
+  h_2620cc60cfd1e9 10-11
+lib/cookbook/planner/shopping_sections.ex
+  h_2620cc60cfd1e9 1-27
+lib/cookbook_web/live/shopping_list_live.ex
+  h_2620cc60cfd1e9 4,7,11-12,14-45,48-73,75-83,86,88-97,102-169,172-181,183-187,189-191,193-223,225
+priv/repo/migrations/20261115102252_persist_shopping_list_state.exs
+  h_2620cc60cfd1e9 1-10
+test/cookbook/shopping_sections_test.exs
+  h_2620cc60cfd1e9 1-14
+test/cookbook_web/live/shopping_list_test.exs
+  h_2620cc60cfd1e9 1-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "824cdd0704f257564a8bc863ed336a5bf79197b0",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
