@@ -1,94 +1,95 @@
 defmodule CookbookWeb.Auth do
-  @moduledoc """
-  Authentication helpers for LiveView and controllers.
-  Provides on_mount hooks and session helpers.
-  """
-
+  @moduledoc "Authentication shared by browser requests and LiveView connections."
   import Phoenix.Component, only: [assign: 2, assign: 3]
   import Phoenix.LiveView, only: [attach_hook: 4]
   use CookbookWeb, :verified_routes
-
   alias Cookbook.Accounts
 
-  @doc """
-  LiveView on_mount hook that requires authentication.
-  Redirects to /login if no user is in session.
-  """
+  @session_lifetime 30 * 86_400
+
+  def session_user(session) do
+    timestamp = session["authenticated_at"]
+    now = System.system_time(:second)
+
+    with true <-
+           is_integer(timestamp) and timestamp <= now and now - timestamp < @session_lifetime,
+         user when not is_nil(user) <- Accounts.get_user(session["user_id"]),
+         true <- Accounts.authorized_user?(user) do
+      user
+    else
+      _ -> nil
+    end
+  end
+
   def on_mount(:require_auth, _params, session, socket) do
-    case session["user_id"] do
+    case session_user(session) do
       nil ->
         {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/login")}
 
-      user_id ->
-        case Accounts.get_user(user_id) do
-          nil ->
-            {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/login")}
+      user ->
+        socket =
+          socket
+          |> assign(
+            current_user: user,
+            current_scope: %{user: user},
+            navigation: Cookbook.Planner.navigation_summary(user.id)
+          )
+          |> attach_hook(:check_authentication, :handle_event, fn _, _, socket ->
+            if session_user(session) do
+              {:cont, socket}
+            else
+              {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/login")}
+            end
+          end)
+          |> attach_hook(:set_nav_path, :handle_params, fn _, uri, socket ->
+            if session_user(session) do
+              {:cont, assign(socket, :nav_path, URI.parse(uri).path)}
+            else
+              {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/login")}
+            end
+          end)
+          |> attach_hook(:toggle_unit_system, :handle_event, fn
+            "toggle_unit_system", _, socket ->
+              current = socket.assigns.current_user
+              system = if current.unit_system == "metric", do: "imperial", else: "metric"
 
-          user ->
-            socket =
-              socket
-              |> assign(
-                current_user: user,
-                navigation: Cookbook.Planner.navigation_summary(user.id)
-              )
-              |> attach_hook(:set_nav_path, :handle_params, fn _params, uri, socket ->
-                {:cont, assign(socket, :nav_path, URI.parse(uri).path)}
-              end)
-              |> attach_hook(:toggle_unit_system, :handle_event, fn
-                "toggle_unit_system", _params, socket ->
-                  current = socket.assigns.current_user
-                  new_system = if current.unit_system == "metric", do: "imperial", else: "metric"
+              case Accounts.update_user_unit_system(current, system) do
+                {:ok, user} ->
+                  {:halt, assign(socket, current_user: user, current_scope: %{user: user})}
 
-                  case Accounts.update_user_unit_system(current, new_system) do
-                    {:ok, updated_user} ->
-                      {:halt, assign(socket, current_user: updated_user)}
+                {:error, _} ->
+                  {:halt, socket}
+              end
 
-                    {:error, _} ->
-                      {:halt, socket}
-                  end
+            _, _, socket ->
+              {:cont, socket}
+          end)
 
-                _event, _params, socket ->
-                  {:cont, socket}
-              end)
-
-            {:cont, socket}
-        end
+        {:cont, socket}
     end
   end
 
   def on_mount(:maybe_auth, _params, session, socket) do
-    case session["user_id"] do
-      nil ->
-        {:cont, assign(socket, current_user: nil)}
-
-      user_id ->
-        {:cont, assign(socket, current_user: Accounts.get_user(user_id))}
-    end
+    user = session_user(session)
+    {:cont, assign(socket, current_user: user, current_scope: if(user, do: %{user: user}))}
   end
 
-  @doc """
-  Plug that loads the current user from session into conn assigns.
-  """
   def fetch_current_user(conn, _opts) do
-    user_id = Plug.Conn.get_session(conn, :user_id)
+    user = session_user(Plug.Conn.get_session(conn))
 
-    if user_id do
-      user = Accounts.get_user(user_id)
-      Plug.Conn.assign(conn, :current_user, user)
-    else
-      Plug.Conn.assign(conn, :current_user, nil)
-    end
+    conn
+    |> Plug.Conn.assign(:current_user, user)
+    |> Plug.Conn.assign(:current_scope, if(user, do: %{user: user}))
   end
 
-  @doc """
-  Plug that requires the user to be authenticated.
-  Redirects to /login if not.
-  """
+  def no_store(conn, _opts), do: Plug.Conn.put_resp_header(conn, "cache-control", "no-store")
+
   def require_authenticated_user(conn, _opts) do
     if conn.assigns[:current_user] do
       conn
     else
       conn
+      |> Plug.Conn.clear_session()
       |> Phoenix.Controller.redirect(to: ~p"/login")
       |> Plug.Conn.halt()
     end

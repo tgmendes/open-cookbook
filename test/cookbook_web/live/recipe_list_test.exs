@@ -7,7 +7,7 @@ defmodule CookbookWeb.RecipeListTest do
     {:ok, user} = Accounts.get_or_create_user_by_email("test@example.com")
 
     {:ok, soup} =
-      Recipes.create_recipe(%{
+      Recipes.create_recipe(user.id, %{
         "user_id" => user.id,
         "title" => "Tomato soup",
         "tags" => ["Vegetarian"],
@@ -15,13 +15,13 @@ defmodule CookbookWeb.RecipeListTest do
       })
 
     {:ok, _} =
-      Recipes.create_recipe(%{
+      Recipes.create_recipe(user.id, %{
         "user_id" => user.id,
         "title" => "Roast chicken",
         "tags" => ["Comfort"]
       })
 
-    %{conn: init_test_session(conn, %{user_id: user.id}), recipe: soup, user: user}
+    %{conn: log_in_user(conn, user), recipe: soup, user: user}
   end
 
   test "filter chips and search filter the real collection", %{conn: conn} do

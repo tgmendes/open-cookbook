@@ -4,39 +4,46 @@ defmodule CookbookWeb.LoginLive do
   import Swoosh.Email
 
   def mount(_params, session, socket) do
-    if session["user_id"] && Accounts.get_user(session["user_id"]) do
+    if CookbookWeb.Auth.session_user(session) do
       {:ok, push_navigate(socket, to: ~p"/")}
     else
       {:ok,
        assign(socket,
          page_title: "Sign in",
          form: to_form(%{"email" => ""}, as: :login),
-         sent: false
+         sent: false,
+         delivery_error: false
        ), layout: false}
     end
   end
 
   def handle_event("send_magic_link", %{"login" => %{"email" => email}}, socket) do
-    case Accounts.get_or_create_user_by_email(email) do
-      {:ok, user} ->
-        {:ok, raw_token} = Accounts.create_login_token(user)
+    case Accounts.request_login_token(email) do
+      {:ok, user, raw_token} ->
         link = url(socket, ~p"/auth/callback?token=#{raw_token}")
 
-        new()
-        |> to(user.email)
-        |> from({"Cookbook", System.get_env("MAIL_FROM", "onboarding@resend.dev")})
-        |> subject("Your magic login link")
-        |> text_body("Click here to log in: #{link}\n\nThis link expires in 10 minutes.")
-        |> html_body(
-          "<h2>Sign in to Open Cookbook</h2><p><a href=\"#{link}\">Sign in to your cookbook</a></p><p>This link expires in 10 minutes.</p>"
-        )
-        |> Mailer.deliver()
+        result =
+          new()
+          |> to(user.email)
+          |> from({"Cookbook", System.get_env("MAIL_FROM", "onboarding@resend.dev")})
+          |> subject("Your magic login link")
+          |> text_body("Click here to log in: #{link}\n\nThis link expires in 10 minutes.")
+          |> html_body(
+            "<h2>Sign in to Open Cookbook</h2><p><a href=\"#{link}\">Sign in to your cookbook</a></p><p>This link expires in 10 minutes.</p>"
+          )
+          |> Mailer.deliver()
 
-      {:error, :unauthorized} ->
-        :ok
+        case result do
+          {:ok, _} -> {:noreply, assign(socket, sent: true, delivery_error: false)}
+          {:error, _} -> {:noreply, assign(socket, sent: false, delivery_error: true)}
+        end
+
+      {:error, reason} when reason in [:unauthorized, :rate_limited] ->
+        {:noreply, assign(socket, sent: true)}
+
+      {:error, _} ->
+        {:noreply, assign(socket, sent: false, delivery_error: true)}
     end
-
-    {:noreply, assign(socket, sent: true)}
   end
 
   def render(assigns) do
@@ -45,7 +52,8 @@ defmodule CookbookWeb.LoginLive do
       <div class="grid min-h-dvh lg:grid-cols-2">
         <section class="hidden flex-col justify-between border-r border-base-300 bg-peach p-12 text-peach-ink lg:flex">
           <div class="flex items-center gap-3">
-            <.icon name="hero-book-open" class="size-8" /><span class="font-heading text-xl font-semibold">
+            <.icon name="hero-book-open" class="size-8" />
+            <span class="font-heading text-xl font-semibold">
               Open Cookbook
             </span>
           </div>
@@ -73,6 +81,14 @@ defmodule CookbookWeb.LoginLive do
             /></button>
           </div>
           <section :if={!@sent} class="surface w-full max-w-md space-y-5 p-6 sm:p-8">
+            <p
+              :if={@delivery_error}
+              id="login-error"
+              role="alert"
+              class="rounded-xl bg-blush p-3 text-sm text-blush-ink"
+            >
+              We couldn't send your sign-in link. Please try again.
+            </p>
             <p class="eyebrow">Welcome back</p>
             <h2 class="text-3xl leading-tight">Sign in to your cookbook</h2>
             <p class="text-sm leading-relaxed text-muted">
@@ -87,7 +103,8 @@ defmodule CookbookWeb.LoginLive do
                 autocomplete="email"
                 required
                 class="field"
-              /><button
+              />
+              <button
                 type="submit"
                 phx-disable-with="Sending…"
                 class="action action-primary w-full"

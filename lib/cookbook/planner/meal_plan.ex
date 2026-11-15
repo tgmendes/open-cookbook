@@ -18,7 +18,7 @@ defmodule Cookbook.Planner.MealPlan do
 
   def changeset(meal_plan, attrs) do
     meal_plan
-    |> cast(attrs, [:week_start, :notes, :user_id])
+    |> cast(attrs, [:week_start, :notes])
     |> validate_required([:week_start, :user_id])
     |> unique_constraint([:user_id, :week_start])
   end

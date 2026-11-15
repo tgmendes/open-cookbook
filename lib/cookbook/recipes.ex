@@ -19,7 +19,48 @@ defmodule Cookbook.Recipes do
     |> maybe_search(search)
     |> maybe_filter_tag(tag)
     |> order_by([r], desc: r.updated_at)
+    |> order_by([r], asc: r.id)
+    |> maybe_paginate(opts)
     |> Repo.all()
+  end
+
+  defp maybe_paginate(query, opts) do
+    case Keyword.get(opts, :limit) do
+      nil -> query
+      count -> query |> limit(^count) |> offset(^Keyword.get(opts, :offset, 0))
+    end
+  end
+
+  def get_recipe(user_id, id) do
+    with {:ok, id} <- Ecto.UUID.cast(id),
+         %Recipe{} = recipe <- Repo.get_by(Recipe, id: id, user_id: user_id) do
+      {:ok, Repo.preload(recipe, [:ingredients, :steps])}
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  def get_recipe!(user_id, id) do
+    case get_recipe(user_id, id) do
+      {:ok, recipe} -> recipe
+      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: Recipe
+    end
+  end
+
+  def create_recipe(user_id, attrs) do
+    %Recipe{user_id: user_id}
+    |> Recipe.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def update_recipe(user_id, id, attrs) do
+    with {:ok, recipe} <- get_recipe(user_id, id) do
+      recipe |> Recipe.changeset(attrs) |> Repo.update()
+    end
+  end
+
+  def delete_recipe(user_id, id) do
+    with {:ok, recipe} <- get_recipe(user_id, id), do: Repo.delete(recipe)
   end
 
   defp maybe_search(query, nil), do: query
@@ -48,42 +89,6 @@ defmodule Cookbook.Recipes do
 
   defp maybe_filter_tag(query, tag) do
     from r in query, where: ^tag in r.tags
-  end
-
-  @doc """
-  Gets a single recipe with preloaded ingredients and steps.
-  Raises `Ecto.NoResultsError` if the Recipe does not exist.
-  """
-  def get_recipe!(id) do
-    Recipe
-    |> Repo.get!(id)
-    |> Repo.preload([:ingredients, :steps])
-  end
-
-  @doc """
-  Creates a recipe with nested ingredients and steps.
-  """
-  def create_recipe(attrs) do
-    %Recipe{}
-    |> Recipe.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  @doc """
-  Updates a recipe with nested ingredients and steps.
-  """
-  def update_recipe(%Recipe{} = recipe, attrs) do
-    recipe
-    |> Repo.preload([:ingredients, :steps])
-    |> Recipe.changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Deletes a recipe.
-  """
-  def delete_recipe(%Recipe{} = recipe) do
-    Repo.delete(recipe)
   end
 
   @doc """

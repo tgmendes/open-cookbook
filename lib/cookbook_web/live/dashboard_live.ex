@@ -42,13 +42,10 @@ defmodule CookbookWeb.DashboardLive do
           </.link>
         </header>
         <div class="flex flex-wrap gap-2.5">
-          <.link navigate="/recipes/new?mode=url" class="action">
-            <.icon name="hero-link" class="size-4" />Import from link
+          <.link navigate="/settings/connections" class="action">
+            <.icon name="hero-link" class="size-4" />Connect Claude
           </.link>
-          <.link navigate="/recipes/new?mode=generate" class="action"><.icon
-            name="hero-sparkles"
-            class="size-4"
-          />Describe it</.link><.link navigate="/planner" class="action"><.icon
+          <.link navigate="/planner" class="action"><.icon
             name="hero-calendar-days"
             class="size-4"
           />Plan this week</.link><.link navigate="/planner/shopping" class="action"><.icon
@@ -70,7 +67,9 @@ defmodule CookbookWeb.DashboardLive do
                     <span :if={@navigation.tonight.total_time_minutes}>
                       {"#{@navigation.tonight.total_time_minutes} min · "}
                     </span>
-                    <span :if={@navigation.tonight.servings}>Serves {@navigation.tonight.servings}</span>
+                    <span :if={@navigation.tonight.servings}>
+                      Serves {@navigation.tonight.servings}
+                    </span>
                   </p>
                   <.link
                     navigate={~p"/recipes/#{@navigation.tonight.id}/cook"}

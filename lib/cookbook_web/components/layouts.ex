@@ -113,12 +113,15 @@ defmodule CookbookWeb.Layouts do
             <.icon name="hero-cog-6-tooth" class="size-5" />
           </.link>
         </div>
-        <main class={[
-          "min-w-0",
-          !@immersive && "px-5 pt-6 pb-28 sm:px-8 lg:px-10 lg:pt-9 lg:pb-14",
-          @immersive && "min-h-dvh",
-          @page_full_width && "lg:px-8"
-        ]}>
+        <main
+          id="cookbook-content"
+          class={[
+            "min-w-0",
+            !@immersive && "px-5 pt-6 pb-28 sm:px-8 lg:px-10 lg:pt-9 lg:pb-14",
+            @immersive && "min-h-dvh",
+            @page_full_width && "lg:px-8"
+          ]}
+        >
           <div class={[!@immersive && "mx-auto max-w-[1320px]"]}>
             <%= if @inner_block != [] do %>
               {render_slot(@inner_block)}

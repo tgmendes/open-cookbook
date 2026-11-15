@@ -1,6 +1,6 @@
 defmodule CookbookWeb.PlannerLive do
   use CookbookWeb, :live_view
-  alias Cookbook.{Planner, Recipes, AI}
+  alias Cookbook.{Planner, Recipes}
 
   def mount(_params, _session, socket) do
     socket = stream_configure(socket, :meal_rows, dom_id: fn row -> "meal-row-#{row.id}" end)
@@ -12,7 +12,6 @@ defmodule CookbookWeb.PlannerLive do
        selected_meal: :dinner,
        search: "",
        quick: false,
-       ai_loading: false,
        search_form: to_form(%{"search" => ""})
      ), layout: false}
   end
@@ -61,7 +60,7 @@ defmodule CookbookWeb.PlannerLive do
 
   def handle_event("assign_recipe", %{"recipe-id" => id}, socket) do
     if Enum.any?(Recipes.list_recipes(socket.assigns.current_user.id), &(&1.id == id)) do
-      case Planner.add_entry(socket.assigns.plan, %{
+      case Planner.add_entry(socket.assigns.current_user.id, socket.assigns.plan.id, %{
              day_of_week: socket.assigns.selected_day,
              meal_type: socket.assigns.selected_meal,
              recipe_id: id
@@ -75,44 +74,11 @@ defmodule CookbookWeb.PlannerLive do
   end
 
   def handle_event("remove_entry", %{"entry-id" => id}, socket) do
-    if Enum.any?(socket.assigns.plan.entries, &(&1.id == id)), do: Planner.remove_entry(id)
+    if Enum.any?(socket.assigns.plan.entries, &(&1.id == id)),
+      do: Planner.remove_entry(socket.assigns.current_user.id, id)
+
     {:noreply, refresh(socket)}
   end
-
-  def handle_event("suggest_plan", _, socket) do
-    if socket.assigns.ai_loading do
-      {:noreply, socket}
-    else
-      recipes = Recipes.list_recipes(socket.assigns.current_user.id)
-      plan_id = socket.assigns.plan.id
-
-      {:noreply,
-       socket
-       |> assign(ai_loading: true)
-       |> start_async({:suggest_plan, plan_id}, fn -> AI.suggest_weekly_plan(recipes) end)}
-    end
-  end
-
-  def handle_async({:suggest_plan, plan_id}, {:ok, {:ok, data}}, socket) do
-    if socket.assigns.plan.id == plan_id do
-      Planner.fill_empty_slots(socket.assigns.plan, data["plan"] || [])
-
-      {:noreply,
-       socket
-       |> assign(ai_loading: false)
-       |> refresh()
-       |> put_flash(:info, "Suggestions added to empty slots.")}
-    else
-      {:noreply, assign(socket, ai_loading: false)}
-    end
-  end
-
-  def handle_async({:suggest_plan, _}, _, socket),
-    do:
-      {:noreply,
-       socket
-       |> assign(ai_loading: false)
-       |> put_flash(:error, "Couldn't suggest meals. Your plan is unchanged.")}
 
   defp meal_type("lunch"), do: :lunch
   defp meal_type("dinner"), do: :dinner
@@ -210,7 +176,12 @@ defmodule CookbookWeb.PlannerLive do
               >
                 <.icon name="hero-chevron-left" class="size-5" />
               </.link>
-              <span class="min-w-36 text-center font-bold">{Calendar.strftime(@week_start, "%-d %b")} – {Calendar.strftime(Date.add(@week_start, 6), "%-d %b")}</span><.link
+              <span class="min-w-36 text-center font-bold">
+                {Calendar.strftime(@week_start, "%-d %b")} – {Calendar.strftime(
+                  Date.add(@week_start, 6),
+                  "%-d %b"
+                )}
+              </span><.link
                 id="next-week"
                 patch={~p"/planner?week=#{Date.to_iso8601(@nav.next)}"}
                 aria-label="Next week"
@@ -219,20 +190,12 @@ defmodule CookbookWeb.PlannerLive do
             </div>
           </div>
           <div class="flex flex-wrap gap-2.5">
-            <button
-              id="fill-slots"
-              phx-click="suggest_plan"
-              disabled={@ai_loading || @filled_count == 14 || @tray_empty?}
-              class="action"
-            >
-              <.icon name="hero-sparkles" class="size-4" />{if @ai_loading,
-                do: "Finding meals…",
-                else: "Fill #{14 - @filled_count} empty slots"}
-            </button>
             <.link
               navigate={~p"/planner/shopping?week=#{Date.to_iso8601(@week_start)}"}
               class="action action-primary"
-            ><.icon name="hero-shopping-cart" class="size-4" />Shopping list · {@shopping_count} left</.link>
+            >
+              <.icon name="hero-shopping-cart" class="size-4" />Shopping list · {@shopping_count} left
+            </.link>
           </div>
         </header>
         <div id="plan-summary" class="flex flex-wrap gap-3">
@@ -435,10 +398,12 @@ defmodule CookbookWeb.PlannerLive do
                 ]}>
                   <.icon name="hero-book-open" class="size-5" />
                 </span>
-                <span class="min-w-0 flex-1"><span class="block text-sm font-bold">{recipe.title}</span><span
-                  :if={recipe.total_time_minutes}
-                  class="text-xs text-muted"
-                >{recipe.total_time_minutes} min</span></span><button
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-bold">{recipe.title}</span><span
+                    :if={recipe.total_time_minutes}
+                    class="text-xs text-muted"
+                  >{recipe.total_time_minutes} min</span>
+                </span><button
                   id={"tray-add-#{recipe.id}"}
                   phx-click="assign_recipe"
                   phx-value-recipe-id={recipe.id}

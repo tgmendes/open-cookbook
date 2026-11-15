@@ -8,7 +8,10 @@ defmodule CookbookWeb.Endpoint do
     store: :cookie,
     key: "_cookbook_key",
     signing_salt: "aF9hOld5",
-    same_site: "Lax"
+    same_site: "Lax",
+    http_only: true,
+    secure: Application.compile_env(:cookbook, :secure_cookies, false),
+    max_age: 30 * 86_400
   ]
 
   socket "/live", Phoenix.LiveView.Socket,

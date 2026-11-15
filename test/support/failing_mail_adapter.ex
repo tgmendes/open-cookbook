@@ -1,0 +1,4 @@
+defmodule Cookbook.FailingMailAdapter do
+  use Swoosh.Adapter
+  def deliver(_email, _config), do: {:error, :delivery_failed}
+end

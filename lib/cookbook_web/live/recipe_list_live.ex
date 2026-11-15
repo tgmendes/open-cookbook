@@ -39,8 +39,13 @@ defmodule CookbookWeb.RecipeListLive do
   def handle_event("sort", %{"sort" => sort}, socket), do: patch_filters(socket, %{sort: sort})
   def handle_event("close-plan", _, socket), do: {:noreply, assign(socket, planning_recipe: nil)}
 
+  def handle_event("delete", %{"id" => id}, socket) do
+    Recipes.delete_recipe(socket.assigns.current_user.id, id)
+    {:noreply, refresh(socket)}
+  end
+
   def handle_event("add_to_plan", %{"id" => id}, socket) do
-    recipe = Recipes.get_recipe!(id)
+    recipe = Recipes.get_recipe!(socket.assigns.current_user.id, id)
 
     if recipe.user_id == socket.assigns.current_user.id,
       do: {:noreply, assign(socket, planning_recipe: recipe)},
@@ -53,7 +58,7 @@ defmodule CookbookWeb.RecipeListLive do
          true <- type in ["lunch", "dinner"],
          {:ok, plan} <- Planner.get_or_create_plan_for_week(socket.assigns.current_user.id, date),
          {:ok, _} <-
-           Planner.add_entry(plan, %{
+           Planner.add_entry(socket.assigns.current_user.id, plan.id, %{
              recipe_id: recipe.id,
              day_of_week: Date.day_of_week(date),
              meal_type: if(type == "lunch", do: :lunch, else: :dinner)
@@ -147,15 +152,10 @@ defmodule CookbookWeb.RecipeListLive do
             <p class="mt-1.5 text-[15px] text-muted">Your collection, ready to plan or cook.</p>
           </div>
           <div class="flex flex-wrap gap-2.5">
-            <.link navigate={~p"/recipes/new?mode=url"} class="action">
-              <.icon name="hero-link" class="size-4" />Import from link
+            <.link navigate={~p"/settings/connections"} class="action">
+              <.icon name="hero-link" class="size-4" />Connect Claude
             </.link>
-            <.link navigate={~p"/recipes/new?mode=generate"} class="action">
-              <.icon
-                name="hero-sparkles"
-                class="size-4"
-              />Describe it
-            </.link><.link navigate={~p"/recipes/new"} class="action action-primary"><.icon
+            <.link navigate={~p"/recipes/new"} class="action action-primary"><.icon
               name="hero-plus"
               class="size-4"
             />New recipe</.link>

@@ -35,4 +35,11 @@ defmodule CookbookWeb.ConnCase do
     Cookbook.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  def log_in_user(conn, user) do
+    Plug.Test.init_test_session(conn, %{
+      user_id: user.id,
+      authenticated_at: System.system_time(:second)
+    })
+  end
 end

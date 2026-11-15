@@ -7,7 +7,7 @@ defmodule CookbookWeb.RemainingPagesTest do
     {:ok, user} = Accounts.get_or_create_user_by_email("test@example.com")
 
     {:ok, recipe} =
-      Recipes.create_recipe(%{
+      Recipes.create_recipe(user.id, %{
         "user_id" => user.id,
         "title" => "Soup",
         "servings" => 2,
@@ -15,7 +15,7 @@ defmodule CookbookWeb.RemainingPagesTest do
         "steps" => [%{"instruction" => "Chop carrots", "short_title" => "Chop", "position" => 0}]
       })
 
-    %{conn: init_test_session(conn, %{user_id: user.id}), user: user, recipe: recipe}
+    %{conn: log_in_user(conn, user), user: user, recipe: recipe}
   end
 
   test "today shows the real dinner and recipe collection", %{
@@ -26,7 +26,7 @@ defmodule CookbookWeb.RemainingPagesTest do
     {:ok, plan} = Planner.get_or_create_plan_for_week(user.id, Date.utc_today())
 
     {:ok, _} =
-      Planner.add_entry(plan, %{
+      Planner.add_entry(user.id, plan.id, %{
         recipe_id: recipe.id,
         day_of_week: Date.day_of_week(Date.utc_today()),
         meal_type: :dinner
@@ -72,11 +72,10 @@ defmodule CookbookWeb.RemainingPagesTest do
     assert has_element?(view, "textarea[name='recipe[steps][1][instruction]']")
   end
 
-  test "describe and URL links open the right creator state", %{conn: conn} do
+  test "old creator links open the manual form without embedded AI", %{conn: conn} do
     {:ok, view, _} = live(conn, "/recipes/new?mode=url")
-    assert has_element?(view, "#creator-form textarea[placeholder='Paste a recipe link…']")
-    view |> element("#mode-manual") |> render_click()
     assert has_element?(view, "#recipe-form")
+    refute has_element?(view, "#creator-form")
   end
 
   test "login sends a magic link and doesn't expose account membership" do

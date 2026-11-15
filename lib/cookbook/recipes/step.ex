@@ -17,6 +17,8 @@ defmodule Cookbook.Recipes.Step do
     step
     |> cast(attrs, [:instruction, :short_title, :position, :duration_minutes])
     |> validate_required([:instruction])
+    |> validate_length(:short_title, max: 200)
+    |> validate_number(:duration_minutes, greater_than_or_equal_to: 0)
   end
 
   def title(step) do

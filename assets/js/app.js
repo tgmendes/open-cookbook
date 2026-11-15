@@ -49,28 +49,11 @@ const ScreenWakeLock = {
   }
 }
 
-const ScrollToBottom = {
-  mounted() {
-    this.scrollToBottom()
-    this.observer = new MutationObserver(() => this.scrollToBottom())
-    this.observer.observe(this.el, { childList: true, subtree: true })
-  },
-  updated() {
-    this.scrollToBottom()
-  },
-  destroyed() {
-    if (this.observer) this.observer.disconnect()
-  },
-  scrollToBottom() {
-    this.el.scrollTop = this.el.scrollHeight
-  }
-}
-
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, ScrollToBottom, ScreenWakeLock, CookTimers},
+  hooks: {...colocatedHooks, ScreenWakeLock, CookTimers},
 })
 
 // Theme toggle — dispatched by the sun/moon button in the sidebar
@@ -82,11 +65,6 @@ document.addEventListener("toggle-theme", () => {
 })
 
 document.addEventListener("cookbook:print", () => window.print())
-
-window.addEventListener("phx:trigger-file-input", (e) => {
-  const input = document.getElementById(e.detail.id)
-  if (input) input.click()
-})
 
 // Show progress bar on live navigation and form submits
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})

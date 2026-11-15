@@ -1,10 +1,11 @@
 defmodule CookbookWeb.RecipeShowLive do
   use CookbookWeb, :live_view
-  alias Cookbook.{AI, Recipes}
+  alias Cookbook.Recipes
+  alias Cookbook.Recipes.Scaling
   alias Cookbook.Recipes.Step
 
   def mount(%{"id" => id}, _session, socket) do
-    recipe = Recipes.get_recipe!(id)
+    recipe = Recipes.get_recipe!(socket.assigns.current_user.id, id)
 
     if recipe.user_id != socket.assigns.current_user.id do
       {:ok, push_navigate(socket, to: ~p"/recipes")}
@@ -26,7 +27,7 @@ defmodule CookbookWeb.RecipeShowLive do
   end
 
   def handle_event("delete", _, socket) do
-    {:ok, _} = Recipes.delete_recipe(socket.assigns.recipe)
+    Recipes.delete_recipe(socket.assigns.current_user.id, socket.assigns.recipe.id)
     {:noreply, push_navigate(socket, to: ~p"/recipes")}
   end
 
@@ -44,32 +45,26 @@ defmodule CookbookWeb.RecipeShowLive do
     case Integer.parse(String.trim(value)) do
       {servings, ""} when servings > 0 and servings <= 100 ->
         recipe = socket.assigns.recipe
-        system = socket.assigns.current_user.unit_system
 
-        {:noreply,
-         socket
-         |> assign(adjust_loading: true, adjust_error: nil)
-         |> start_async(:adjust, fn -> AI.adjust_quantities(recipe, servings, system) end)}
+        case Scaling.scale(recipe, servings) do
+          {:ok, %{ingredients: list, servings: servings}} ->
+            {:noreply,
+             socket
+             |> assign(adjust_open: false, adjusted_servings: servings, adjust_error: nil)
+             |> ingredients(list)}
+
+          {:error, _} ->
+            {:noreply,
+             assign(socket,
+               adjust_error:
+                 "Set the recipe's original serving count before adjusting quantities."
+             )}
+        end
 
       _ ->
         {:noreply, assign(socket, adjust_error: "Enter a serving count between 1 and 100.")}
     end
   end
-
-  def handle_async(:adjust, {:ok, {:ok, %{ingredients: list, servings: servings}}}, socket),
-    do:
-      {:noreply,
-       socket
-       |> assign(adjust_loading: false, adjust_open: false, adjusted_servings: servings)
-       |> ingredients(list)}
-
-  def handle_async(:adjust, _, socket),
-    do:
-      {:noreply,
-       assign(socket,
-         adjust_loading: false,
-         adjust_error: "Couldn't adjust quantities. Please try again."
-       )}
 
   defp ingredients(socket, list) do
     list =
@@ -91,7 +86,8 @@ defmodule CookbookWeb.RecipeShowLive do
           <div class="flex gap-2">
             <.link navigate={~p"/recipes/#{@recipe.id}/edit"} aria-label="Edit recipe" class="action">
               <.icon name="hero-pencil-square" class="size-4" />Edit
-            </.link><button
+            </.link>
+            <button
               id="delete-recipe"
               phx-click="delete"
               data-confirm="Delete this recipe? This cannot be undone."
@@ -127,7 +123,8 @@ defmodule CookbookWeb.RecipeShowLive do
                 class="rounded-full bg-butter px-3 py-1.5 text-sm text-butter-ink"
               >
                 {@recipe.total_time_minutes} min
-              </span><span
+              </span>
+              <span
                 :if={@recipe.servings}
                 class="rounded-full bg-sage px-3 py-1.5 text-sm text-sage-ink"
               >Serves {@adjusted_servings || @recipe.servings}</span><span
@@ -143,7 +140,8 @@ defmodule CookbookWeb.RecipeShowLive do
                 class="action action-primary"
               >
                 <.icon name="hero-play" class="size-5" />Start cooking
-              </.link><button id="detail-adjust" phx-click="open_adjust" class="action"><.icon
+              </.link>
+              <button id="detail-adjust" phx-click="open_adjust" class="action"><.icon
                 name="hero-sparkles"
                 class="size-4"
               />Adjust servings</button><button
@@ -170,7 +168,8 @@ defmodule CookbookWeb.RecipeShowLive do
               >
                 <strong class="min-w-16 text-sm">
                   {row.ingredient.quantity} {row.ingredient.unit}
-                </strong><span>{row.ingredient.name}</span>
+                </strong>
+                <span>{row.ingredient.name}</span>
               </li>
             </ul>
           </section>
@@ -222,7 +221,7 @@ defmodule CookbookWeb.RecipeShowLive do
             </button>
           </div>
           <p class="text-sm text-muted">
-            AI scales the ingredient amounts. Your saved recipe stays unchanged.
+            Numeric ingredient amounts scale locally. Non-numeric amounts and your saved recipe stay unchanged.
           </p>
           <.form for={@adjust_form} id="adjust-form" phx-submit="adjust_quantities" class="space-y-4">
             <.input
@@ -243,7 +242,7 @@ defmodule CookbookWeb.RecipeShowLive do
               {@adjust_error}
             </p>
             <button type="submit" disabled={@adjust_loading} class="action action-primary w-full">
-              {if @adjust_loading, do: "Adjusting…", else: "Adjust with AI"}
+              Adjust servings
             </button>
           </.form>
         </section>

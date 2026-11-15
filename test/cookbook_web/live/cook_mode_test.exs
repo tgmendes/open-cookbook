@@ -7,7 +7,7 @@ defmodule CookbookWeb.CookModeTest do
     {:ok, user} = Accounts.get_or_create_user_by_email("test@example.com")
 
     {:ok, recipe} =
-      Recipes.create_recipe(%{
+      Recipes.create_recipe(user.id, %{
         "user_id" => user.id,
         "title" => "Carrot soup",
         "servings" => 2,
@@ -26,7 +26,7 @@ defmodule CookbookWeb.CookModeTest do
         ]
       })
 
-    %{conn: init_test_session(conn, %{user_id: user.id}), recipe: recipe}
+    %{conn: log_in_user(conn, user), user: user, recipe: recipe}
   end
 
   test "opens prep, gathers ingredients and starts steps with short titles", %{
@@ -56,30 +56,31 @@ defmodule CookbookWeb.CookModeTest do
     assert has_element?(view, "#cook-prep")
   end
 
-  test "servings adjustment uses existing AI flow and recovers from failure", %{
+  test "servings adjustment scales quantities locally", %{
     conn: conn,
     recipe: recipe
   } do
     {:ok, view, _} = live(conn, "/recipes/#{recipe.id}/cook")
     view |> element("#more-servings") |> render_click()
-    render_async(view)
-    assert has_element?(view, "#adjust-error")
-    assert has_element?(view, "#servings", "2")
+    refute has_element?(view, "#adjust-error")
+    assert has_element?(view, "#servings", "3")
+    assert has_element?(view, "#gather-0", "3")
     refute has_element?(view, "#more-servings[disabled]")
   end
 
-  test "short titles survive persistence", %{recipe: recipe} do
-    assert hd(Recipes.get_recipe!(recipe.id).steps).short_title == "Chop carrots"
+  test "short titles survive persistence", %{recipe: recipe, user: user} do
+    assert hd(Recipes.get_recipe!(user.id, recipe.id).steps).short_title == "Chop carrots"
   end
 
   test "prep derives equipment from the instructions without inventing it", %{
     conn: conn,
+    user: user,
     recipe: recipe
   } do
     first = hd(recipe.steps)
 
     {:ok, _} =
-      Recipes.update_recipe(recipe, %{
+      Recipes.update_recipe(user.id, recipe.id, %{
         "steps" => [
           %{
             "id" => first.id,

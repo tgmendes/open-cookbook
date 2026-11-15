@@ -45,13 +45,13 @@ defmodule Cookbook.RecipesTest do
     )
   end
 
-  describe "create_recipe/1" do
+  describe "create_recipe/2" do
     test "creates a recipe with ingredients and steps", %{user: user} do
-      assert {:ok, recipe} = Recipes.create_recipe(recipe_attrs(user))
+      assert {:ok, recipe} = Recipes.create_recipe(user.id, recipe_attrs(user))
       assert recipe.title == "Spaghetti Carbonara"
       assert recipe.total_time_minutes == 30
 
-      recipe = Recipes.get_recipe!(recipe.id)
+      recipe = Recipes.get_recipe!(user.id, recipe.id)
       assert length(recipe.ingredients) == 3
       assert length(recipe.steps) == 3
 
@@ -61,37 +61,40 @@ defmodule Cookbook.RecipesTest do
 
     test "requires a title", %{user: user} do
       attrs = recipe_attrs(user, %{"title" => ""})
-      assert {:error, changeset} = Recipes.create_recipe(attrs)
+      assert {:error, changeset} = Recipes.create_recipe(user.id, attrs)
       assert errors_on(changeset).title
     end
   end
 
-  describe "update_recipe/2" do
+  describe "update_recipe/3" do
     test "updates the recipe title", %{user: user} do
-      {:ok, recipe} = Recipes.create_recipe(recipe_attrs(user))
-      {:ok, updated} = Recipes.update_recipe(recipe, %{"title" => "Updated Title"})
+      {:ok, recipe} = Recipes.create_recipe(user.id, recipe_attrs(user))
+      {:ok, updated} = Recipes.update_recipe(user.id, recipe.id, %{"title" => "Updated Title"})
       assert updated.title == "Updated Title"
     end
   end
 
-  describe "delete_recipe/1" do
+  describe "delete_recipe/2" do
     test "deletes the recipe", %{user: user} do
-      {:ok, recipe} = Recipes.create_recipe(recipe_attrs(user))
-      {:ok, _} = Recipes.delete_recipe(recipe)
-      assert_raise Ecto.NoResultsError, fn -> Recipes.get_recipe!(recipe.id) end
+      {:ok, recipe} = Recipes.create_recipe(user.id, recipe_attrs(user))
+      {:ok, _} = Recipes.delete_recipe(user.id, recipe.id)
+      assert_raise Ecto.NoResultsError, fn -> Recipes.get_recipe!(user.id, recipe.id) end
     end
   end
 
   describe "list_recipes/2" do
     test "lists all recipes for a user", %{user: user} do
-      {:ok, _} = Recipes.create_recipe(recipe_attrs(user))
-      {:ok, _} = Recipes.create_recipe(recipe_attrs(user, %{"title" => "Another Recipe"}))
+      {:ok, _} = Recipes.create_recipe(user.id, recipe_attrs(user))
+
+      {:ok, _} =
+        Recipes.create_recipe(user.id, recipe_attrs(user, %{"title" => "Another Recipe"}))
+
       assert length(Recipes.list_recipes(user.id)) == 2
     end
 
     test "searches by title", %{user: user} do
-      {:ok, _} = Recipes.create_recipe(recipe_attrs(user))
-      {:ok, _} = Recipes.create_recipe(recipe_attrs(user, %{"title" => "Chicken Curry"}))
+      {:ok, _} = Recipes.create_recipe(user.id, recipe_attrs(user))
+      {:ok, _} = Recipes.create_recipe(user.id, recipe_attrs(user, %{"title" => "Chicken Curry"}))
 
       results = Recipes.list_recipes(user.id, search: "chicken")
       assert length(results) == 1
@@ -99,10 +102,13 @@ defmodule Cookbook.RecipesTest do
     end
 
     test "filters by tag", %{user: user} do
-      {:ok, _} = Recipes.create_recipe(recipe_attrs(user))
+      {:ok, _} = Recipes.create_recipe(user.id, recipe_attrs(user))
 
       {:ok, _} =
-        Recipes.create_recipe(recipe_attrs(user, %{"title" => "Sushi", "tags" => ["japanese"]}))
+        Recipes.create_recipe(
+          user.id,
+          recipe_attrs(user, %{"title" => "Sushi", "tags" => ["japanese"]})
+        )
 
       results = Recipes.list_recipes(user.id, tag: "japanese")
       assert length(results) == 1
@@ -112,10 +118,11 @@ defmodule Cookbook.RecipesTest do
 
   describe "list_tags/1" do
     test "returns unique tags for a user", %{user: user} do
-      {:ok, _} = Recipes.create_recipe(recipe_attrs(user))
+      {:ok, _} = Recipes.create_recipe(user.id, recipe_attrs(user))
 
       {:ok, _} =
         Recipes.create_recipe(
+          user.id,
           recipe_attrs(user, %{"title" => "Sushi", "tags" => ["japanese", "quick"]})
         )
 

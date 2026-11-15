@@ -46,7 +46,11 @@ defmodule CookbookWeb.ShoppingListLive do
   end
 
   defp save(socket, attrs) do
-    case Planner.update_shopping_state(socket.assigns.plan, attrs) do
+    case Planner.update_shopping_state(
+           socket.assigns.current_user.id,
+           socket.assigns.plan.id,
+           attrs
+         ) do
       {:ok, plan} ->
         {:noreply,
          socket

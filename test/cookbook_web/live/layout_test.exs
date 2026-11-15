@@ -5,7 +5,7 @@ defmodule CookbookWeb.LayoutTest do
 
   setup %{conn: conn} do
     {:ok, user} = Accounts.get_or_create_user_by_email("test@example.com")
-    %{conn: init_test_session(conn, %{user_id: user.id}), user: user}
+    %{conn: log_in_user(conn, user), user: user}
   end
 
   test "navigation has four phone tabs and settings owns preferences", %{conn: conn} do
@@ -24,7 +24,7 @@ defmodule CookbookWeb.LayoutTest do
 
   test "sidebar uses the user's actual dinner and shopping count", %{conn: conn, user: user} do
     {:ok, recipe} =
-      Recipes.create_recipe(%{
+      Recipes.create_recipe(user.id, %{
         "user_id" => user.id,
         "title" => "Tonight's soup",
         "ingredients" => [%{"name" => "Carrots", "quantity" => "2"}],
@@ -34,7 +34,7 @@ defmodule CookbookWeb.LayoutTest do
     {:ok, plan} = Planner.get_or_create_plan_for_week(user.id, Date.utc_today())
 
     {:ok, _} =
-      Planner.add_entry(plan, %{
+      Planner.add_entry(user.id, plan.id, %{
         day_of_week: Date.day_of_week(Date.utc_today()),
         meal_type: :dinner,
         recipe_id: recipe.id

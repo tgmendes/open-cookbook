@@ -40,10 +40,15 @@ defmodule Cookbook.Recipes.Recipe do
       :source_type,
       :tags,
       :image_url,
-      :notes,
-      :user_id
+      :notes
     ])
     |> validate_required([:title, :user_id])
+    |> validate_length(:title, max: 255)
+    |> validate_number(:servings, greater_than: 0)
+    |> validate_number(:prep_time_minutes, greater_than_or_equal_to: 0)
+    |> validate_number(:cook_time_minutes, greater_than_or_equal_to: 0)
+    |> validate_change(:source_url, &validate_web_url/2)
+    |> validate_change(:image_url, &validate_web_url/2)
     |> compute_total_time()
     |> cast_assoc(:ingredients,
       with: &Cookbook.Recipes.Ingredient.changeset/2,
@@ -56,6 +61,15 @@ defmodule Cookbook.Recipes.Recipe do
       drop_param: :steps_drop
     )
     |> foreign_key_constraint(:user_id)
+  end
+
+  defp validate_web_url(field, value) do
+    uri = URI.parse(value)
+
+    if uri.scheme in ["http", "https"] and is_binary(uri.host) and uri.host != "" and
+         is_nil(uri.userinfo),
+       do: [],
+       else: [{field, "must be an HTTP or HTTPS URL without credentials"}]
   end
 
   defp compute_total_time(changeset) do

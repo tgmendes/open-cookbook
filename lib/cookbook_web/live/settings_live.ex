@@ -36,9 +36,18 @@ defmodule CookbookWeb.SettingsLive do
             </button>
           </div>
         </section>
-        <a href="/auth/logout" class="action">
+        <section class="surface space-y-3 p-6">
+          <h2 class="text-lg">Private connections</h2>
+          <p class="text-sm text-muted">
+            Let Claude save recipes and plan meals through your private API.
+          </p>
+          <.link navigate="/settings/connections" class="action">
+            Manage connections <.icon name="hero-link" class="size-5" />
+          </.link>
+        </section>
+        <.link href="/auth/logout" method="delete" class="action">
           Log out <.icon name="hero-arrow-right-on-rectangle" class="size-5" />
-        </a>
+        </.link>
       </div>
     </Layouts.app>
     """

@@ -11,7 +11,7 @@ defmodule Cookbook.PlannerTest do
     {:ok, user} = Accounts.get_or_create_user_by_email(@allowed_email)
 
     {:ok, recipe} =
-      Recipes.create_recipe(%{
+      Recipes.create_recipe(user.id, %{
         "title" => "Test Recipe",
         "user_id" => user.id,
         "ingredients" => %{
@@ -53,7 +53,7 @@ defmodule Cookbook.PlannerTest do
       {:ok, plan} = Planner.get_or_create_plan_for_week(user.id, ~D[2026-02-23])
 
       {:ok, entry} =
-        Planner.add_entry(plan, %{
+        Planner.add_entry(user.id, plan.id, %{
           day_of_week: 1,
           meal_type: :lunch,
           recipe_id: recipe.id
@@ -68,13 +68,13 @@ defmodule Cookbook.PlannerTest do
       {:ok, plan} = Planner.get_or_create_plan_for_week(user.id, ~D[2026-02-23])
 
       {:ok, entry} =
-        Planner.add_entry(plan, %{
+        Planner.add_entry(user.id, plan.id, %{
           day_of_week: 1,
           meal_type: :lunch,
           recipe_id: recipe.id
         })
 
-      {:ok, _} = Planner.remove_entry(entry.id)
+      {:ok, _} = Planner.remove_entry(user.id, entry.id)
 
       {:ok, updated_plan} = Planner.get_or_create_plan_for_week(user.id, ~D[2026-02-23])
       assert updated_plan.entries == []
@@ -86,10 +86,19 @@ defmodule Cookbook.PlannerTest do
       {:ok, plan} = Planner.get_or_create_plan_for_week(user.id, ~D[2026-02-23])
 
       # Add the same recipe to two slots
-      Planner.add_entry(plan, %{day_of_week: 1, meal_type: :lunch, recipe_id: recipe.id})
-      Planner.add_entry(plan, %{day_of_week: 2, meal_type: :dinner, recipe_id: recipe.id})
+      Planner.add_entry(user.id, plan.id, %{
+        day_of_week: 1,
+        meal_type: :lunch,
+        recipe_id: recipe.id
+      })
 
-      list = Planner.generate_shopping_list(plan.id)
+      Planner.add_entry(user.id, plan.id, %{
+        day_of_week: 2,
+        meal_type: :dinner,
+        recipe_id: recipe.id
+      })
+
+      list = Planner.generate_shopping_list(user.id, plan.id)
 
       flour = Enum.find(list, &(&1.name == "flour"))
       assert flour.quantity == "1000"
@@ -101,7 +110,7 @@ defmodule Cookbook.PlannerTest do
 
     test "sums fractional quantities", %{user: user} do
       {:ok, recipe} =
-        Recipes.create_recipe(%{
+        Recipes.create_recipe(user.id, %{
           "title" => "Fraction Recipe",
           "user_id" => user.id,
           "ingredients" => %{
@@ -115,11 +124,25 @@ defmodule Cookbook.PlannerTest do
 
       {:ok, plan} = Planner.get_or_create_plan_for_week(user.id, ~D[2026-03-02])
 
-      Planner.add_entry(plan, %{day_of_week: 1, meal_type: :lunch, recipe_id: recipe.id})
-      Planner.add_entry(plan, %{day_of_week: 2, meal_type: :dinner, recipe_id: recipe.id})
-      Planner.add_entry(plan, %{day_of_week: 3, meal_type: :lunch, recipe_id: recipe.id})
+      Planner.add_entry(user.id, plan.id, %{
+        day_of_week: 1,
+        meal_type: :lunch,
+        recipe_id: recipe.id
+      })
 
-      list = Planner.generate_shopping_list(plan.id)
+      Planner.add_entry(user.id, plan.id, %{
+        day_of_week: 2,
+        meal_type: :dinner,
+        recipe_id: recipe.id
+      })
+
+      Planner.add_entry(user.id, plan.id, %{
+        day_of_week: 3,
+        meal_type: :lunch,
+        recipe_id: recipe.id
+      })
+
+      list = Planner.generate_shopping_list(user.id, plan.id)
 
       pesto = Enum.find(list, &(&1.name == "pesto"))
       assert pesto.quantity == "1"

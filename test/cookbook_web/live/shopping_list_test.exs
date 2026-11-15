@@ -7,7 +7,7 @@ defmodule CookbookWeb.ShoppingListTest do
     {:ok, user} = Accounts.get_or_create_user_by_email("test@example.com")
 
     {:ok, recipe} =
-      Recipes.create_recipe(%{
+      Recipes.create_recipe(user.id, %{
         "user_id" => user.id,
         "title" => "Carrot soup",
         "ingredients" => [
@@ -17,8 +17,15 @@ defmodule CookbookWeb.ShoppingListTest do
       })
 
     {:ok, plan} = Planner.get_or_create_plan_for_week(user.id, Date.utc_today())
-    {:ok, _} = Planner.add_entry(plan, %{recipe_id: recipe.id, day_of_week: 1, meal_type: :lunch})
-    %{conn: init_test_session(conn, %{user_id: user.id})}
+
+    {:ok, _} =
+      Planner.add_entry(user.id, plan.id, %{
+        recipe_id: recipe.id,
+        day_of_week: 1,
+        meal_type: :lunch
+      })
+
+    %{conn: log_in_user(conn, user)}
   end
 
   test "groups by aisle, shows provenance, and moves checked items to the basket", %{conn: conn} do

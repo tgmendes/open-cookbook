@@ -1,10 +1,11 @@
 defmodule CookbookWeb.CookModeLive do
   use CookbookWeb, :live_view
-  alias Cookbook.{AI, Recipes}
+  alias Cookbook.Recipes
+  alias Cookbook.Recipes.Scaling
   alias Cookbook.Recipes.Step
 
   def mount(%{"id" => id}, _session, socket) do
-    recipe = Recipes.get_recipe!(id)
+    recipe = Recipes.get_recipe!(socket.assigns.current_user.id, id)
 
     cond do
       recipe.user_id != socket.assigns.current_user.id ->
@@ -76,40 +77,25 @@ defmodule CookbookWeb.CookModeLive do
       delta = if direction == "more", do: 1, else: -1
       servings = (socket.assigns.requested_servings + delta) |> max(1) |> min(12)
       recipe = socket.assigns.recipe
-      unit_system = socket.assigns.current_user.unit_system
 
-      {:noreply,
-       socket
-       |> assign(requested_servings: servings, adjust_loading: true, adjust_error: nil)
-       |> start_async(:adjust_quantities, fn ->
-         AI.adjust_quantities(recipe, servings, unit_system)
-       end)}
+      case Scaling.scale(recipe, servings) do
+        {:ok, %{ingredients: ingredients, servings: servings}} ->
+          {:noreply,
+           assign(socket,
+             adjusted_ingredients: ingredients,
+             adjusted_servings: servings,
+             requested_servings: servings,
+             gathered: MapSet.new(),
+             adjust_error: nil
+           )}
+
+        {:error, _} ->
+          {:noreply,
+           assign(socket,
+             adjust_error: "Set the recipe's original serving count before adjusting quantities."
+           )}
+      end
     end
-  end
-
-  def handle_async(
-        :adjust_quantities,
-        {:ok, {:ok, %{ingredients: ingredients, servings: servings}}},
-        socket
-      ) do
-    {:noreply,
-     assign(socket,
-       adjusted_ingredients: ingredients,
-       adjusted_servings: servings,
-       requested_servings: servings,
-       adjust_loading: false,
-       gathered: MapSet.new()
-     )}
-  end
-
-  def handle_async(:adjust_quantities, _, socket) do
-    {:noreply,
-     assign(socket,
-       adjust_loading: false,
-       requested_servings:
-         socket.assigns.adjusted_servings || socket.assigns.recipe.servings || 2,
-       adjust_error: "Couldn't adjust quantities. Your original amounts are unchanged. Try again."
-     )}
   end
 
   defp move(socket, delta),
@@ -430,10 +416,17 @@ defmodule CookbookWeb.CookModeLive do
                 id="next-step"
                 phx-click="next"
                 class="action action-primary min-h-16 min-w-0 flex-1 justify-between text-left"
-              ><span class="min-w-0"><span class="block text-xs">{if @next_step, do: "NEXT · STEP #{@current_step + 2}", else: "ALL DONE"}</span><span class="block truncate">{if @next_step, do: Step.title(@next_step), else: "Finish cooking"}</span></span><.icon
-                name="hero-arrow-right"
-                class="size-6 shrink-0"
-              /></button>
+              >
+                <span class="min-w-0">
+                  <span class="block text-xs">
+                    {if @next_step, do: "NEXT · STEP #{@current_step + 2}", else: "ALL DONE"}
+                  </span><span class="block truncate">{if @next_step, do: Step.title(@next_step), else: "Finish cooking"}</span>
+                </span>
+                <.icon
+                  name="hero-arrow-right"
+                  class="size-6 shrink-0"
+                />
+              </button>
             </div>
             <p class="text-xs text-muted">Tip: use ← and → on a keyboard.</p>
           </section>

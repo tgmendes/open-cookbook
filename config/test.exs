@@ -30,9 +30,6 @@ config :swoosh, :api_client, false
 # Set allowed email for testing
 config :cookbook, allowed_email: "test@example.com"
 
-# Tests must never inherit developer credentials or call a paid AI provider.
-config :cookbook, openrouter_api_key: nil
-
 # Print only warnings and errors during test
 config :logger, level: :warning
 
