@@ -1,0 +1,70 @@
+README.md
+  h_2620cc60cfd1e9 9-10,59-62,88-133
+config/runtime.exs
+  h_2620cc60cfd1e9 3-9
+docs/speakeasy-setup.md
+  h_2620cc60cfd1e9 59,63-65
+lib/cookbook/planner.ex
+  h_2620cc60cfd1e9 325-326,328-329,331-334
+lib/cookbook/recipe_images.ex
+  h_2620cc60cfd1e9 1-136
+lib/cookbook/recipes.ex
+  h_2620cc60cfd1e9 21,95-97
+lib/cookbook/recipes/ingredient.ex
+  h_2620cc60cfd1e9 49-51,61-70,72-117
+lib/cookbook/recipes/quantity.ex
+  h_2620cc60cfd1e9 1-35
+lib/cookbook/recipes/recipe.ex
+  h_2620cc60cfd1e9 19-28,42-43,55-65,69-70,76-78,91-145
+lib/cookbook/recipes/scaling.ex
+  h_2620cc60cfd1e9 2-3,10,16-17,19-21,23-27
+lib/cookbook/recipes/step.ex
+  h_2620cc60cfd1e9 12,19,23-38
+lib/cookbook_web/controllers/api_fallback_controller.ex
+  h_2620cc60cfd1e9 17
+lib/cookbook_web/controllers/api_input.ex
+  h_2620cc60cfd1e9 4,6,12-13,25-26,32,54-58,76,80-87,93-97
+lib/cookbook_web/controllers/cookbook_api_controller.ex
+  h_2620cc60cfd1e9 67-74
+lib/cookbook_web/controllers/cookbook_json.ex
+  h_2620cc60cfd1e9 16-25,37-47,54
+lib/cookbook_web/controllers/recipe_image_controller.ex
+  h_2620cc60cfd1e9 1-14
+lib/cookbook_web/live/cook_mode_live.ex
+  h_2620cc60cfd1e9 109-111,200-211,394,398,400-405,416-427,456-457,496
+lib/cookbook_web/live/recipe_form_live.ex
+  h_2620cc60cfd1e9 16-25,27-34,79-86,150-160,179-187,234,241-247,252-253,265-269,307-314,318-325,338-349,359-360
+lib/cookbook_web/live/recipe_list_live.ex
+  h_2620cc60cfd1e9 13,31,42-45,88-89,101-102,166-171,196-203
+lib/cookbook_web/live/recipe_show_live.ex
+  h_2620cc60cfd1e9 22,71-75,102-104,138-140,154-159,193-195,203-246
+lib/cookbook_web/open_api.ex
+  h_2620cc60cfd1e9 9,40,65,94,110-140,187,224-244,247,249,251-252,268-275,286,289-300,362-368
+lib/cookbook_web/router.ex
+  h_2620cc60cfd1e9 26-38,46
+priv/openapi.json
+  h_2620cc60cfd1e9 3,8-14,34-35,44-45,55-56,64-65,67,69-70,74-94,96-97,107-108,112-113,115,117-118,122-142,144-145,175-178,194-195,202-203,214-217,219,222-228,232,242-243,247-248,252-253,262-263,265,267-268,270-285,293-297,314-347,365-368,373-374,384-385,389-390,394-395,404-405,407,409-410,412-427,435-439,456-489,504-505,516-519,521,524-530,532,542-543,547-548,552-553,562-563,565,567-568,570-585,593-597,614,616-646,653-656,661-662,670-671,675-676,680-681,690-691,693,695-696,698-713,721-725,742-775,790-791,805-806,811-825,827-828,838-839,844-858,860-861,866-875,906-907,942-943,998-999,1053-1054,1058-1059,1096-1097,1099-1100,1135-1136,1159-1166,1224-1225,1227-1228,1263-1264,1267,1275-1276,1294-1295,1350-1351,1382-1383,1418-1419,1468-1469,1472,1498-1499,1544-1668,1673,1719-1720,1724-1725,1727-1728,1735-1736,1738-1739,1774-1775,1778
+priv/repo/migrations/20261115132218_enrich_recipe_import_model.exs
+  h_2620cc60cfd1e9 1-49
+test/cookbook_web/controllers/recipe_image_test.exs
+  h_2620cc60cfd1e9 1-184
+test/cookbook_web/controllers/recipe_import_test.exs
+  h_2620cc60cfd1e9 1-169
+test/cookbook_web/live/cookbook_live_test.exs
+  h_2620cc60cfd1e9 28
+test/cookbook_web/live/recipe_import_live_test.exs
+  h_2620cc60cfd1e9 1-94
+test/cookbook_web/live/remaining_pages_test.exs
+  h_2620cc60cfd1e9 59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df70e76656066f6c04c14c7a6f0caa4e806d0f0c",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
