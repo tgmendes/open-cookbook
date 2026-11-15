@@ -64,6 +64,14 @@ defmodule CookbookWeb.CookbookApiController do
          do: send_resp(conn, :no_content, "")
   end
 
+  def upload_image(conn, %{"id" => id}) do
+    with {:ok, recipe} <- Recipes.get_recipe(conn.assigns.current_user.id, id),
+         {:ok, attrs} <- Cookbook.RecipeImages.upload(recipe, conn.body_params),
+         {:ok, recipe} <- Recipes.update_recipe(conn.assigns.current_user.id, id, attrs) do
+      json(conn, %{data: CookbookJSON.recipe(recipe)})
+    end
+  end
+
   def plan(conn, %{"week" => week}) do
     with {:ok, date} <- ApiInput.date(week) do
       json(conn, %{

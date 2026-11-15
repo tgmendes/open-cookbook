@@ -19,6 +19,7 @@ defmodule CookbookWeb.RecipeShowLive do
          adjust_loading: false,
          adjust_error: nil,
          adjusted_servings: nil,
+         display_ingredients: recipe.ingredients,
          adjust_form: to_form(%{"servings" => recipe.servings || 2})
        )
        |> ingredients(recipe.ingredients)
@@ -67,6 +68,11 @@ defmodule CookbookWeb.RecipeShowLive do
   end
 
   defp ingredients(socket, list) do
+    socket =
+      socket
+      |> assign(display_ingredients: list)
+      |> stream(:steps, socket.assigns.recipe.steps, reset: true)
+
     list =
       list
       |> Enum.with_index()
@@ -93,7 +99,9 @@ defmodule CookbookWeb.RecipeShowLive do
               data-confirm="Delete this recipe? This cannot be undone."
               aria-label="Delete recipe"
               class="action size-11 !p-0"
-            ><.icon name="hero-trash" class="size-5" /></button>
+            >
+              <.icon name="hero-trash" class="size-5" />
+            </button>
           </div>
         </div>
         <div class="grid items-start gap-7 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -127,7 +135,9 @@ defmodule CookbookWeb.RecipeShowLive do
               <span
                 :if={@recipe.servings}
                 class="rounded-full bg-sage px-3 py-1.5 text-sm text-sage-ink"
-              >Serves {@adjusted_servings || @recipe.servings}</span><span
+              >
+                Serves {@adjusted_servings || @recipe.servings}
+              </span><span
                 :for={tag <- @recipe.tags}
                 class="rounded-full bg-tag px-3 py-1.5 text-sm text-secondary-ink"
               >{tag}</span>
@@ -141,10 +151,12 @@ defmodule CookbookWeb.RecipeShowLive do
               >
                 <.icon name="hero-play" class="size-5" />Start cooking
               </.link>
-              <button id="detail-adjust" phx-click="open_adjust" class="action"><.icon
-                name="hero-sparkles"
-                class="size-4"
-              />Adjust servings</button><button
+              <button id="detail-adjust" phx-click="open_adjust" class="action">
+                <.icon
+                  name="hero-sparkles"
+                  class="size-4"
+                />Adjust servings
+              </button><button
                 phx-click={JS.dispatch("cookbook:print")}
                 class="action"
               ><.icon name="hero-printer" class="size-4" />Print</button>
@@ -178,7 +190,9 @@ defmodule CookbookWeb.RecipeShowLive do
             <ol id="detail-steps" phx-update="stream" class="space-y-5">
               <li :for={{id, step} <- @streams.steps} id={id} class="surface space-y-2 p-5">
                 <h3 class="text-lg">{step.position + 1}. {Step.title(step)}</h3>
-                <p class="leading-relaxed text-secondary-ink">{step.instruction}</p>
+                <p class="leading-relaxed text-secondary-ink">
+                  {Step.instruction(step, @display_ingredients)}
+                </p>
                 <p :if={step.duration_minutes} class="text-sm text-muted">
                   About {step.duration_minutes} min
                 </p>
@@ -186,6 +200,50 @@ defmodule CookbookWeb.RecipeShowLive do
             </ol>
           </section>
         </div>
+        <section
+          :if={@recipe.image_credit || @recipe.image_license || @recipe.image_match}
+          id="image-attribution"
+          class="text-sm text-muted"
+        >
+          <p :if={@recipe.image_credit}>Photo: {@recipe.image_credit}</p>
+          <p :if={@recipe.image_license}>{@recipe.image_license}</p>
+          <p :if={@recipe.image_match == :approximate}>Approximate photo — not this exact recipe.</p>
+          <a
+            :if={@recipe.image_source_url}
+            href={@recipe.image_source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex min-h-11 items-center underline"
+          >
+            Photo source
+          </a>
+        </section>
+        <section
+          :for={
+            {id, title, text} <- [
+              {"prep-ahead", "Prep ahead", @recipe.prep_ahead},
+              {"freezer-notes", "Freezing & reheating", @recipe.freezer_notes},
+              {"troubleshooting", "If it goes wrong", @recipe.troubleshooting},
+              {"variations", "Swaps & scaling", @recipe.variations}
+            ]
+          }
+          :if={text}
+          id={"recipe-#{id}"}
+          class="surface p-6"
+        >
+          <h2 class="mb-2 text-lg">{title}</h2>
+          <p class="whitespace-pre-line leading-relaxed">{text}</p>
+        </section>
+        <a
+          :if={@recipe.source_conversation_url}
+          id="source-conversation"
+          href={@recipe.source_conversation_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex min-h-11 items-center gap-2 text-sm underline"
+        >
+          View source conversation <.icon name="hero-arrow-top-right-on-square" class="size-4" />
+        </a>
         <section :if={@recipe.notes} class="rounded-[20px] bg-butter p-6 text-butter-ink">
           <h2 class="mb-2 text-lg">Kitchen notes</h2>
           <p class="whitespace-pre-line leading-relaxed">{@recipe.notes}</p>

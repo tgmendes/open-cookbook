@@ -13,6 +13,16 @@ defmodule CookbookWeb.CookbookJSON do
     :tags,
     :image_url,
     :notes,
+    :prep_ahead,
+    :troubleshooting,
+    :variations,
+    :freezer_friendly,
+    :freezer_notes,
+    :source_conversation_url,
+    :image_credit,
+    :image_source_url,
+    :image_license,
+    :image_match,
     :inserted_at,
     :updated_at
   ]
@@ -24,14 +34,24 @@ defmodule CookbookWeb.CookbookJSON do
       :ingredients,
       Enum.map(
         recipe.ingredients,
-        &Map.take(&1, [:name, :quantity, :unit, :group_name, :position])
+        fn ingredient ->
+          ingredient
+          |> Map.take([:name, :quantity, :quantity_text, :ref, :unit, :group_name, :position])
+          |> Map.put(
+            :quantity_value,
+            if(ingredient.quantity_value,
+              do: Decimal.to_float(ingredient.quantity_value),
+              else: nil
+            )
+          )
+        end
       )
     )
     |> Map.put(
       :steps,
       Enum.map(
         recipe.steps,
-        &Map.take(&1, [:instruction, :short_title, :position, :duration_minutes])
+        &Map.take(&1, [:instruction, :short_title, :position, :duration_minutes, :ingredient_refs])
       )
     )
   end

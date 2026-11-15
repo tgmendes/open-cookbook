@@ -25,7 +25,7 @@ defmodule CookbookWeb.CookbookLiveTest do
         title: "Manual pasta",
         servings: "2",
         tags_input: "quick, pasta",
-        ingredients: %{"0" => %{name: "Pasta", quantity: "200", unit: "g"}},
+        ingredients: %{"0" => %{name: "Pasta", quantity_value: "200", unit: "g"}},
         steps: %{"0" => %{instruction: "Boil water", duration_minutes: "10"}}
       }
     )

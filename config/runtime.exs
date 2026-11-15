@@ -1,5 +1,12 @@
 import Config
 
+# Credentials belong in Fly secrets, never in recipe payloads or source control.
+config :cookbook, :image_storage,
+  endpoint: System.get_env("R2_ENDPOINT"),
+  bucket: System.get_env("R2_BUCKET"),
+  access_key_id: System.get_env("R2_ACCESS_KEY_ID"),
+  secret_access_key: System.get_env("R2_SECRET_ACCESS_KEY")
+
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration

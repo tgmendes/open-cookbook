@@ -23,6 +23,19 @@ defmodule CookbookWeb.Router do
     plug CookbookWeb.ApiAuth
   end
 
+  pipeline :private_image do
+    plug :fetch_session
+    plug :fetch_current_user
+    plug :require_authenticated_user
+    plug :put_secure_browser_headers
+    plug :no_store
+  end
+
+  scope "/", CookbookWeb do
+    pipe_through :private_image
+    get "/recipes/:id/image/:filename", RecipeImageController, :show
+  end
+
   scope "/api/v1", CookbookWeb do
     pipe_through [:api, :authenticated_api]
     get "/profile", CookbookApiController, :profile
@@ -30,6 +43,7 @@ defmodule CookbookWeb.Router do
     post "/recipes", CookbookApiController, :create
     get "/recipes/:id", CookbookApiController, :show
     patch "/recipes/:id", CookbookApiController, :update
+    post "/recipes/:id/image", CookbookApiController, :upload_image
     delete "/recipes/:id", CookbookApiController, :delete
     get "/meal-plans/:week", CookbookApiController, :plan
     put "/meal-plans/:week/slots/:day/:meal", CookbookApiController, :replace_slot

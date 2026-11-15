@@ -106,6 +106,9 @@ defmodule CookbookWeb.CookModeLive do
       )
 
   @modifiers ~w(plain fresh dried whole ground fine extra large small medium chopped sliced diced minced grated crushed peeled canned frozen)
+  defp matched_ingredients(%{ingredient_refs: [_ | _] = refs}, ingredients),
+    do: Enum.filter(ingredients, &(&1.ref in refs))
+
   defp matched_ingredients(step, ingredients) do
     Enum.filter(ingredients, fn ing ->
       words =
@@ -194,6 +197,18 @@ defmodule CookbookWeb.CookModeLive do
                 <span :if={@total_minutes > 0}>{@total_minutes} min total · </span>{length(@steps)} steps
               </p>
             </header>
+            <section
+              :if={@recipe.prep_ahead}
+              id="cook-prep-ahead"
+              class="rounded-2xl bg-butter p-4 text-butter-ink"
+            >
+              <h2 class="text-lg">Prep ahead</h2>
+              <p class="mt-2 whitespace-pre-line">{@recipe.prep_ahead}</p>
+            </section>
+            <section :if={@recipe.freezer_notes} id="cook-freezer-notes" class="surface p-4">
+              <h2 class="text-lg">Freezing & reheating</h2>
+              <p class="mt-2 whitespace-pre-line">{@recipe.freezer_notes}</p>
+            </section>
             <div class="surface flex items-center justify-between gap-3 !rounded-2xl p-2.5 pl-4">
               <span class="font-bold">Servings</span>
               <div class="flex items-center gap-2">
@@ -376,12 +391,18 @@ defmodule CookbookWeb.CookModeLive do
           >
             <h2 id="step-heading" class="eyebrow">Step {@current_step + 1} · {Step.title(@step)}</h2>
             <p
+              id="step-instruction"
               aria-live="polite"
               class="max-w-3xl font-heading text-[28px] leading-[1.32] font-medium lg:text-[38px]"
             >
-              {@step.instruction}
+              {Step.instruction(@step, @ingredients)}
             </p>
-            <section :if={@step_ingredients != []} aria-label="For this step" class="space-y-2.5">
+            <section
+              :if={@step_ingredients != []}
+              id="step-ingredients"
+              aria-label="For this step"
+              class="space-y-2.5"
+            >
               <h3 class="eyebrow">For this step</h3>
               <div class="flex flex-wrap gap-2.5">
                 <span
@@ -392,6 +413,18 @@ defmodule CookbookWeb.CookModeLive do
                 </span>
               </div>
             </section>
+            <details
+              :if={@recipe.troubleshooting}
+              id="cook-troubleshooting"
+              class="rounded-2xl bg-butter p-4 text-butter-ink"
+            >
+              <summary class="min-h-11 cursor-pointer font-bold">If it goes wrong</summary>
+              <p class="whitespace-pre-line">{@recipe.troubleshooting}</p>
+            </details>
+            <details :if={@recipe.variations} id="cook-variations" class="surface p-4">
+              <summary class="min-h-11 cursor-pointer font-bold">Swaps & scaling</summary>
+              <p class="whitespace-pre-line">{@recipe.variations}</p>
+            </details>
             <button
               :if={@step.duration_minutes && @step.duration_minutes > 0}
               id="start-timer"
@@ -420,7 +453,8 @@ defmodule CookbookWeb.CookModeLive do
                 <span class="min-w-0">
                   <span class="block text-xs">
                     {if @next_step, do: "NEXT · STEP #{@current_step + 2}", else: "ALL DONE"}
-                  </span><span class="block truncate">{if @next_step, do: Step.title(@next_step), else: "Finish cooking"}</span>
+                  </span>
+                  <span class="block truncate">{if @next_step, do: Step.title(@next_step), else: "Finish cooking"}</span>
                 </span>
                 <.icon
                   name="hero-arrow-right"
@@ -459,7 +493,7 @@ defmodule CookbookWeb.CookModeLive do
             </div>
             <div :if={@next_step && @current_step >= 0} class="rounded-2xl bg-sage p-4 text-sage-ink">
               <h3 class="eyebrow !text-inherit">Coming up</h3>
-              <p class="mt-2 text-sm leading-relaxed">{@next_step.instruction}</p>
+              <p class="mt-2 text-sm leading-relaxed">{Step.instruction(@next_step, @ingredients)}</p>
             </div>
           </aside>
         </div>

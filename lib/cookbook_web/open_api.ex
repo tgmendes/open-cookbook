@@ -6,7 +6,7 @@ defmodule CookbookWeb.OpenAPI do
       openapi: "3.0.3",
       info: %{
         title: "Open Cookbook",
-        version: "1.0.0",
+        version: "1.1.0",
         description:
           "Private recipe storage and weekly meal planning. Every cookbook operation requires the owner's API token."
       },
@@ -37,6 +37,7 @@ defmodule CookbookWeb.OpenAPI do
             |> Map.put(:parameters, [
               query("search", %{type: "string"}),
               query("tag", %{type: "string"}),
+              query("freezer_friendly", %{type: "boolean"}),
               query("limit", %{type: "integer", minimum: 1, maximum: 100, default: 50}),
               query("offset", %{type: "integer", minimum: 0, default: 0})
             ])
@@ -61,7 +62,7 @@ defmodule CookbookWeb.OpenAPI do
           post:
             operation(
               "create_recipe",
-              "Save a complete recipe. Generate a fresh Idempotency-Key for each intentional creation and reuse it for retries of the same body. The original response is replayed for 24 hours, even if the recipe is subsequently edited or deleted. Reusing a key for a different body returns 409.",
+              "Save a complete recipe. Ingredients and steps are stored in array order; do not supply position. Use stable ingredient ref strings and step ingredient_refs for links. Generate a fresh Idempotency-Key for each intentional creation and reuse it for retries of the same body. The original response is replayed for 24 hours, even if the recipe is subsequently edited or deleted. Reusing a key for a different body returns 409.",
               ref("Recipe"),
               "201"
             )
@@ -90,7 +91,7 @@ defmodule CookbookWeb.OpenAPI do
           patch:
             operation(
               "update_recipe",
-              "Update selected fields. Omitted ingredients/steps remain unchanged; a supplied array replaces that entire collection. Empty arrays remove that collection. Read the latest recipe before replacing nested content.",
+              "Update selected fields. Omitted ingredients/steps remain unchanged; a supplied array replaces that entire collection in array order. Preserve ingredient ref values when replacing ingredients, and update affected steps in the same request when removing referenced ingredients. Empty arrays remove that collection. Read the latest recipe before replacing nested content.",
               ref("Recipe")
             )
             |> Map.put(:parameters, [path("id", %{type: "string", format: "uuid"})])
@@ -105,6 +106,37 @@ defmodule CookbookWeb.OpenAPI do
                 "204" => %{description: "Recipe and meal-plan references removed."}
               })
           }
+        },
+        "/api/v1/recipes/{id}/image" => %{
+          post:
+            operation(
+              "upload_recipe_image",
+              "Upload a JPEG, PNG or WebP file (maximum 5,000,000 bytes) to the cookbook's private R2 storage and update this recipe's photo and attribution. Requires a licence allowing this use. The returned image_url requires the owner's browser session to view; bucket credentials stay on the server. Repeating the same bytes uses the same storage key. Existing external image URLs remain supported. Returns 503 when storage is unconfigured or unavailable.",
+              ref("Recipe")
+            )
+            |> Map.put(:parameters, [path("id", %{type: "string", format: "uuid"})])
+            |> Map.put(:requestBody, %{
+              required: true,
+              content: %{
+                "multipart/form-data" => %{
+                  schema:
+                    object(
+                      %{
+                        file: %{type: "string", format: "binary"},
+                        image_credit: %{type: "string", minLength: 1, maxLength: 20_000},
+                        image_source_url: %{type: "string", format: "uri", maxLength: 20_000},
+                        image_license: %{type: "string", minLength: 1, maxLength: 20_000},
+                        image_match: %{type: "string", enum: ["exact", "approximate"]}
+                      },
+                      [:file, :image_credit, :image_source_url, :image_license]
+                    )
+                }
+              }
+            })
+            |> put_in(
+              [:responses, "503"],
+              error("Image storage is not configured or is temporarily unavailable.")
+            )
         },
         "/api/v1/meal-plans/{week}" => %{
           get:
@@ -152,7 +184,7 @@ defmodule CookbookWeb.OpenAPI do
           get:
             operation(
               "get_shopping_list",
-              "Read aggregated ingredients from the week's planned recipes. Quantities are per recipe occurrence, not adjusted to diners. Shopping checkmarks are local to the browser and are not part of this API.",
+              "Read aggregated ingredients from the week's planned recipes. Numeric quantities are summed as decimals for matching ingredient names and units; non-numeric amounts remain text. Quantities are per recipe occurrence, not adjusted to diners. Shopping checkmarks are not part of this API.",
               object(
                 %{
                   week_start: %{type: "string", format: "date"},
@@ -189,15 +221,35 @@ defmodule CookbookWeb.OpenAPI do
     ingredient =
       object(
         %{
-          name: %{type: "string", minLength: 1, maxLength: 20_000},
+          name: %{type: "string", minLength: 1, maxLength: 255},
+          ref: %{
+            type: "string",
+            pattern: "^[a-zA-Z0-9_-]{1,100}$",
+            description:
+              "Stable unique reference within this recipe, e.g. broccoli. Generated if omitted. Preserve it on updates; use it in step ingredient_refs and inline placeholders."
+          },
+          quantity_value: %{
+            type: "number",
+            nullable: true,
+            minimum: 0,
+            maximum: 1_000_000_000,
+            description:
+              "Canonical numeric amount for decimal scaling and shopping totals. For 1/2, send 0.5 here and optionally 1/2 in quantity_text."
+          },
+          quantity_text:
+            Map.put(
+              Map.put(string(), :maxLength, 255),
+              :description,
+              "Optional display text, e.g. 1/2 or to taste. Use null quantity_value for non-numeric amounts. When scaling a numeric amount, the scaled number replaces display text."
+            ),
           quantity:
             Map.put(
-              string(),
+              Map.put(string(), :maxLength, 255),
               :description,
-              "Text quantity, including fractions such as 1/2 or phrases such as to taste."
+              "Legacy text quantity. Still accepted and parsed when structured quantity fields are omitted. Responses retain this display field for existing clients. Prefer quantity_value and quantity_text for new recipes."
             ),
-          unit: string(),
-          group_name: string()
+          unit: Map.put(string(), :maxLength, 255),
+          group_name: Map.put(string(), :maxLength, 255)
         },
         [:name]
       )
@@ -213,7 +265,14 @@ defmodule CookbookWeb.OpenAPI do
             description:
               "Optional concise action title for cook mode, such as Start the rice. Falls back to the first few instruction words when omitted."
           },
-          duration_minutes: integer(0)
+          duration_minutes: integer(0),
+          ingredient_refs: %{
+            type: "array",
+            maxItems: 200,
+            items: %{type: "string"},
+            description:
+              "Ingredient ref values used by this step. Each must exist in this recipe. Write {{broccoli}} in instruction to display its current amount, unit and name inline; every placeholder must also be listed here. References use the full ingredient amount, not a partial allocation."
+          }
         },
         [:instruction]
       )
@@ -224,11 +283,21 @@ defmodule CookbookWeb.OpenAPI do
       servings: integer(1),
       prep_time_minutes: integer(0),
       cook_time_minutes: integer(0),
-      source_url: string(),
+      source_url: Map.put(string(), :maxLength, 255),
       source_type: %{type: "string", enum: ["manual", "scraped", "generated"], default: "manual"},
       tags: %{type: "array", maxItems: 100, items: %{type: "string"}},
-      image_url: string(),
-      notes: string()
+      image_url: Map.put(string(), :maxLength, 255),
+      notes: string(),
+      prep_ahead: string(),
+      troubleshooting: string(),
+      variations: string(),
+      freezer_friendly: %{type: "boolean", default: false},
+      freezer_notes: string(),
+      source_conversation_url: string(),
+      image_credit: string(),
+      image_source_url: string(),
+      image_license: string(),
+      image_match: %{type: "string", nullable: true, enum: ["exact", "approximate"]}
     }
 
     input =
@@ -290,7 +359,13 @@ defmodule CookbookWeb.OpenAPI do
               properties: %{
                 code: %{
                   type: "string",
-                  enum: ["unauthorized", "not_found", "validation_error", "conflict"]
+                  enum: [
+                    "unauthorized",
+                    "not_found",
+                    "validation_error",
+                    "conflict",
+                    "storage_unavailable"
+                  ]
                 },
                 details: %{type: "object", additionalProperties: true}
               }

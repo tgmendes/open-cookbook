@@ -1,17 +1,23 @@
 {
   "info": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Private recipe storage and weekly meal planning. Every cookbook operation requires the owner's API token.",
     "title": "Open Cookbook"
   },
   "components": {
+    "securitySchemes": {
+      "cookbookToken": {
+        "scheme": "bearer",
+        "type": "http",
+        "description": "Create a revocable token in the cookbook's Connections page. Store it only in Speakeasy's secure credential settings, never in tool arguments or chat."
+      }
+    },
     "schemas": {
       "Error": {
         "type": "object",
         "required": [
           "error"
         ],
-        "additionalProperties": false,
         "properties": {
           "error": {
             "type": "object",
@@ -25,7 +31,8 @@
                   "unauthorized",
                   "not_found",
                   "validation_error",
-                  "conflict"
+                  "conflict",
+                  "storage_unavailable"
                 ]
               },
               "details": {
@@ -34,19 +41,19 @@
               }
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Ingredient": {
         "type": "object",
         "required": [
           "name"
         ],
-        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string",
-            "maxLength": 20000,
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 255
           },
           "position": {
             "type": "integer",
@@ -54,51 +61,88 @@
           },
           "unit": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
-          "group_name": {
+          "ref": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "description": "Stable unique reference within this recipe, e.g. broccoli. Generated if omitted. Preserve it on updates; use it in step ingredient_refs and inline placeholders.",
+            "pattern": "^[a-zA-Z0-9_-]{1,100}$"
           },
           "quantity": {
             "type": "string",
-            "description": "Text quantity, including fractions such as 1/2 or phrases such as to taste.",
-            "nullable": true,
-            "maxLength": 20000
+            "description": "Legacy text quantity. Still accepted and parsed when structured quantity fields are omitted. Responses retain this display field for existing clients. Prefer quantity_value and quantity_text for new recipes.",
+            "maxLength": 255,
+            "nullable": true
+          },
+          "quantity_value": {
+            "maximum": 1000000000,
+            "type": "number",
+            "description": "Canonical numeric amount for decimal scaling and shopping totals. For 1/2, send 0.5 here and optionally 1/2 in quantity_text.",
+            "minimum": 0,
+            "nullable": true
+          },
+          "quantity_text": {
+            "type": "string",
+            "description": "Optional display text, e.g. 1/2 or to taste. Use null quantity_value for non-numeric amounts. When scaling a numeric amount, the scaled number replaces display text.",
+            "maxLength": 255,
+            "nullable": true
+          },
+          "group_name": {
+            "type": "string",
+            "maxLength": 255,
+            "nullable": true
           }
-        }
+        },
+        "additionalProperties": false
       },
       "IngredientInput": {
         "type": "object",
         "required": [
           "name"
         ],
-        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string",
-            "maxLength": 20000,
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 255
           },
           "unit": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
-          "group_name": {
+          "ref": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "description": "Stable unique reference within this recipe, e.g. broccoli. Generated if omitted. Preserve it on updates; use it in step ingredient_refs and inline placeholders.",
+            "pattern": "^[a-zA-Z0-9_-]{1,100}$"
           },
           "quantity": {
             "type": "string",
-            "description": "Text quantity, including fractions such as 1/2 or phrases such as to taste.",
-            "nullable": true,
-            "maxLength": 20000
+            "description": "Legacy text quantity. Still accepted and parsed when structured quantity fields are omitted. Responses retain this display field for existing clients. Prefer quantity_value and quantity_text for new recipes.",
+            "maxLength": 255,
+            "nullable": true
+          },
+          "quantity_value": {
+            "maximum": 1000000000,
+            "type": "number",
+            "description": "Canonical numeric amount for decimal scaling and shopping totals. For 1/2, send 0.5 here and optionally 1/2 in quantity_text.",
+            "minimum": 0,
+            "nullable": true
+          },
+          "quantity_text": {
+            "type": "string",
+            "description": "Optional display text, e.g. 1/2 or to taste. Use null quantity_value for non-numeric amounts. When scaling a numeric amount, the scaled number replaces display text.",
+            "maxLength": 255,
+            "nullable": true
+          },
+          "group_name": {
+            "type": "string",
+            "maxLength": 255,
+            "nullable": true
           }
-        }
+        },
+        "additionalProperties": false
       },
       "MealPlan": {
         "type": "object",
@@ -106,7 +150,6 @@
           "week_start",
           "entries"
         ],
-        "additionalProperties": false,
         "properties": {
           "entries": {
             "type": "array",
@@ -120,7 +163,6 @@
                 "recipe_id",
                 "recipe_title"
               ],
-              "additionalProperties": false,
               "properties": {
                 "id": {
                   "type": "string",
@@ -129,6 +171,10 @@
                 "position": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "recipe_id": {
+                  "type": "string",
+                  "format": "uuid"
                 },
                 "day_of_week": {
                   "maximum": 7,
@@ -142,21 +188,19 @@
                     "dinner"
                   ]
                 },
-                "recipe_id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
                 "recipe_title": {
                   "type": "string"
                 }
-              }
+              },
+              "additionalProperties": false
             }
           },
           "week_start": {
             "type": "string",
             "format": "date"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Recipe": {
         "type": "object",
@@ -167,18 +211,27 @@
           "source_url",
           "cook_time_minutes",
           "image_url",
-          "notes",
-          "prep_time_minutes",
+          "image_credit",
+          "image_source_url",
+          "image_license",
+          "image_match",
           "servings",
+          "prep_time_minutes",
           "source_type",
           "tags",
+          "notes",
+          "prep_ahead",
+          "troubleshooting",
+          "variations",
+          "freezer_friendly",
+          "freezer_notes",
+          "source_conversation_url",
           "ingredients",
           "steps",
-          "inserted_at",
           "total_time_minutes",
+          "inserted_at",
           "updated_at"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "type": "string",
@@ -186,18 +239,18 @@
           },
           "description": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "nullable": true
           },
           "title": {
             "type": "string",
-            "maxLength": 255,
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 255
           },
           "source_url": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
           "cook_time_minutes": {
             "type": "integer",
@@ -206,22 +259,40 @@
           },
           "image_url": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
-          "notes": {
+          "image_credit": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "nullable": true
           },
-          "prep_time_minutes": {
-            "type": "integer",
-            "minimum": 0,
+          "image_source_url": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "image_license": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "image_match": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "approximate"
+            ],
             "nullable": true
           },
           "servings": {
             "type": "integer",
             "minimum": 1,
+            "nullable": true
+          },
+          "prep_time_minutes": {
+            "type": "integer",
+            "minimum": 0,
             "nullable": true
           },
           "source_type": {
@@ -239,6 +310,40 @@
               "type": "string"
             },
             "maxItems": 100
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "prep_ahead": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "troubleshooting": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "variations": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "freezer_friendly": {
+            "default": false,
+            "type": "boolean"
+          },
+          "freezer_notes": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "source_conversation_url": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
           },
           "ingredients": {
             "type": "array",
@@ -252,42 +357,42 @@
               "$ref": "#/components/schemas/Step"
             }
           },
-          "inserted_at": {
-            "type": "string",
-            "format": "date-time"
-          },
           "total_time_minutes": {
             "type": "integer",
             "minimum": 0,
             "nullable": true
           },
+          "inserted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
           "updated_at": {
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "RecipeCreate": {
         "type": "object",
         "required": [
           "title"
         ],
-        "additionalProperties": false,
         "properties": {
           "description": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "nullable": true
           },
           "title": {
             "type": "string",
-            "maxLength": 255,
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 255
           },
           "source_url": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
           "cook_time_minutes": {
             "type": "integer",
@@ -296,22 +401,40 @@
           },
           "image_url": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
-          "notes": {
+          "image_credit": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "nullable": true
           },
-          "prep_time_minutes": {
-            "type": "integer",
-            "minimum": 0,
+          "image_source_url": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "image_license": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "image_match": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "approximate"
+            ],
             "nullable": true
           },
           "servings": {
             "type": "integer",
             "minimum": 1,
+            "nullable": true
+          },
+          "prep_time_minutes": {
+            "type": "integer",
+            "minimum": 0,
             "nullable": true
           },
           "source_type": {
@@ -330,6 +453,40 @@
             },
             "maxItems": 100
           },
+          "notes": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "prep_ahead": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "troubleshooting": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "variations": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "freezer_friendly": {
+            "default": false,
+            "type": "boolean"
+          },
+          "freezer_notes": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "source_conversation_url": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
           "ingredients": {
             "type": "array",
             "items": {
@@ -344,7 +501,8 @@
             },
             "maxItems": 200
           }
-        }
+        },
+        "additionalProperties": false
       },
       "RecipeSummary": {
         "type": "object",
@@ -355,16 +513,25 @@
           "source_url",
           "cook_time_minutes",
           "image_url",
-          "notes",
-          "prep_time_minutes",
+          "image_credit",
+          "image_source_url",
+          "image_license",
+          "image_match",
           "servings",
+          "prep_time_minutes",
           "source_type",
           "tags",
-          "inserted_at",
+          "notes",
+          "prep_ahead",
+          "troubleshooting",
+          "variations",
+          "freezer_friendly",
+          "freezer_notes",
+          "source_conversation_url",
           "total_time_minutes",
+          "inserted_at",
           "updated_at"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "type": "string",
@@ -372,18 +539,18 @@
           },
           "description": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "nullable": true
           },
           "title": {
             "type": "string",
-            "maxLength": 255,
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 255
           },
           "source_url": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
           "cook_time_minutes": {
             "type": "integer",
@@ -392,22 +559,40 @@
           },
           "image_url": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
-          "notes": {
+          "image_credit": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "nullable": true
           },
-          "prep_time_minutes": {
-            "type": "integer",
-            "minimum": 0,
+          "image_source_url": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "image_license": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "image_match": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "approximate"
+            ],
             "nullable": true
           },
           "servings": {
             "type": "integer",
             "minimum": 1,
+            "nullable": true
+          },
+          "prep_time_minutes": {
+            "type": "integer",
+            "minimum": 0,
             "nullable": true
           },
           "source_type": {
@@ -426,40 +611,74 @@
             },
             "maxItems": 100
           },
-          "inserted_at": {
+          "notes": {
             "type": "string",
-            "format": "date-time"
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "prep_ahead": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "troubleshooting": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "variations": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "freezer_friendly": {
+            "default": false,
+            "type": "boolean"
+          },
+          "freezer_notes": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "source_conversation_url": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
           },
           "total_time_minutes": {
             "type": "integer",
             "minimum": 0,
             "nullable": true
           },
+          "inserted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
           "updated_at": {
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "RecipeUpdate": {
         "type": "object",
         "required": [],
-        "additionalProperties": false,
         "properties": {
           "description": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "nullable": true
           },
           "title": {
             "type": "string",
-            "maxLength": 255,
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 255
           },
           "source_url": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
           "cook_time_minutes": {
             "type": "integer",
@@ -468,22 +687,40 @@
           },
           "image_url": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 255,
+            "nullable": true
           },
-          "notes": {
+          "image_credit": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "nullable": true
           },
-          "prep_time_minutes": {
-            "type": "integer",
-            "minimum": 0,
+          "image_source_url": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "image_license": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "image_match": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "approximate"
+            ],
             "nullable": true
           },
           "servings": {
             "type": "integer",
             "minimum": 1,
+            "nullable": true
+          },
+          "prep_time_minutes": {
+            "type": "integer",
+            "minimum": 0,
             "nullable": true
           },
           "source_type": {
@@ -501,6 +738,40 @@
               "type": "string"
             },
             "maxItems": 100
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "prep_ahead": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "troubleshooting": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "variations": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "freezer_friendly": {
+            "default": false,
+            "type": "boolean"
+          },
+          "freezer_notes": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
+          },
+          "source_conversation_url": {
+            "type": "string",
+            "maxLength": 20000,
+            "nullable": true
           },
           "ingredients": {
             "type": "array",
@@ -516,72 +787,92 @@
             },
             "maxItems": 200
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Step": {
         "type": "object",
         "required": [
           "instruction"
         ],
-        "additionalProperties": false,
         "properties": {
           "position": {
             "type": "integer",
             "minimum": 0
+          },
+          "instruction": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "short_title": {
+            "type": "string",
+            "description": "Optional concise action title for cook mode, such as Start the rice. Falls back to the first few instruction words when omitted.",
+            "maxLength": 200,
+            "nullable": true
           },
           "duration_minutes": {
             "type": "integer",
             "minimum": 0,
             "nullable": true
           },
-          "instruction": {
-            "type": "string",
-            "maxLength": 20000,
-            "minLength": 1
-          },
-          "short_title": {
-            "type": "string",
-            "description": "Optional concise action title for cook mode, such as Start the rice. Falls back to the first few instruction words when omitted.",
-            "nullable": true,
-            "maxLength": 200
+          "ingredient_refs": {
+            "type": "array",
+            "description": "Ingredient ref values used by this step. Each must exist in this recipe. Write {{broccoli}} in instruction to display its current amount, unit and name inline; every placeholder must also be listed here. References use the full ingredient amount, not a partial allocation.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200
           }
-        }
+        },
+        "additionalProperties": false
       },
       "StepInput": {
         "type": "object",
         "required": [
           "instruction"
         ],
-        "additionalProperties": false,
         "properties": {
+          "instruction": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "short_title": {
+            "type": "string",
+            "description": "Optional concise action title for cook mode, such as Start the rice. Falls back to the first few instruction words when omitted.",
+            "maxLength": 200,
+            "nullable": true
+          },
           "duration_minutes": {
             "type": "integer",
             "minimum": 0,
             "nullable": true
           },
-          "instruction": {
-            "type": "string",
-            "maxLength": 20000,
-            "minLength": 1
-          },
-          "short_title": {
-            "type": "string",
-            "description": "Optional concise action title for cook mode, such as Start the rice. Falls back to the first few instruction words when omitted.",
-            "nullable": true,
-            "maxLength": 200
+          "ingredient_refs": {
+            "type": "array",
+            "description": "Ingredient ref values used by this step. Each must exist in this recipe. Write {{broccoli}} in instruction to display its current amount, unit and name inline; every placeholder must also be listed here. References use the full ingredient amount, not a partial allocation.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200
           }
-        }
-      }
-    },
-    "securitySchemes": {
-      "cookbookToken": {
-        "scheme": "bearer",
-        "type": "http",
-        "description": "Create a revocable token in the cookbook's Connections page. Store it only in Speakeasy's secure credential settings, never in tool arguments or chat."
+        },
+        "additionalProperties": false
       }
     }
   },
   "openapi": "3.0.3",
+  "servers": [
+    {
+      "url": "https://open-cookbook.fly.dev"
+    }
+  ],
+  "security": [
+    {
+      "cookbookToken": []
+    }
+  ],
   "paths": {
     "/api/v1/meal-plans/{week}": {
       "get": {
@@ -598,7 +889,6 @@
             }
           }
         ],
-        "operationId": "get_meal_plan",
         "responses": {
           "200": {
             "description": "Success",
@@ -609,12 +899,12 @@
                   "required": [
                     "data"
                   ],
-                  "additionalProperties": false,
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/MealPlan"
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
               }
             }
@@ -649,7 +939,8 @@
               }
             }
           }
-        }
+        },
+        "operationId": "get_meal_plan"
       }
     },
     "/api/v1/meal-plans/{week}/slots/{day}/{meal}": {
@@ -690,7 +981,6 @@
             }
           }
         ],
-        "operationId": "replace_meal_slot",
         "responses": {
           "200": {
             "description": "Success",
@@ -701,12 +991,12 @@
                   "required": [
                     "data"
                   ],
-                  "additionalProperties": false,
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/MealPlan"
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
               }
             }
@@ -751,7 +1041,6 @@
                 "required": [
                   "recipe_ids"
                 ],
-                "additionalProperties": false,
                 "properties": {
                   "recipe_ids": {
                     "type": "array",
@@ -761,17 +1050,18 @@
                     },
                     "maxItems": 50
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
-        }
+        },
+        "operationId": "replace_meal_slot"
       }
     },
     "/api/v1/profile": {
       "get": {
         "description": "Read the owner's unit preference before composing recipes.",
-        "operationId": "get_cookbook_profile",
         "responses": {
           "200": {
             "description": "Success",
@@ -782,7 +1072,6 @@
                   "required": [
                     "data"
                   ],
-                  "additionalProperties": false,
                   "properties": {
                     "data": {
                       "type": "object",
@@ -790,7 +1079,6 @@
                         "unit_system",
                         "ingredient_units"
                       ],
-                      "additionalProperties": false,
                       "properties": {
                         "unit_system": {
                           "type": "string",
@@ -805,9 +1093,11 @@
                             "type": "string"
                           }
                         }
-                      }
+                      },
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
               }
             }
@@ -842,7 +1132,8 @@
               }
             }
           }
-        }
+        },
+        "operationId": "get_cookbook_profile"
       }
     },
     "/api/v1/recipes": {
@@ -867,6 +1158,14 @@
           },
           {
             "in": "query",
+            "name": "freezer_friendly",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -887,7 +1186,6 @@
             }
           }
         ],
-        "operationId": "list_recipes",
         "responses": {
           "200": {
             "description": "Success",
@@ -899,7 +1197,6 @@
                     "data",
                     "meta"
                   ],
-                  "additionalProperties": false,
                   "properties": {
                     "data": {
                       "type": "array",
@@ -914,7 +1211,6 @@
                         "offset",
                         "has_more"
                       ],
-                      "additionalProperties": false,
                       "properties": {
                         "offset": {
                           "type": "integer"
@@ -925,9 +1221,11 @@
                         "has_more": {
                           "type": "boolean"
                         }
-                      }
+                      },
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
               }
             }
@@ -962,10 +1260,11 @@
               }
             }
           }
-        }
+        },
+        "operationId": "list_recipes"
       },
       "post": {
-        "description": "Save a complete recipe. Generate a fresh Idempotency-Key for each intentional creation and reuse it for retries of the same body. The original response is replayed for 24 hours, even if the recipe is subsequently edited or deleted. Reusing a key for a different body returns 409.",
+        "description": "Save a complete recipe. Ingredients and steps are stored in array order; do not supply position. Use stable ingredient ref strings and step ingredient_refs for links. Generate a fresh Idempotency-Key for each intentional creation and reuse it for retries of the same body. The original response is replayed for 24 hours, even if the recipe is subsequently edited or deleted. Reusing a key for a different body returns 409.",
         "parameters": [
           {
             "in": "header",
@@ -973,12 +1272,11 @@
             "required": true,
             "schema": {
               "type": "string",
-              "maxLength": 128,
-              "minLength": 1
+              "minLength": 1,
+              "maxLength": 128
             }
           }
         ],
-        "operationId": "create_recipe",
         "responses": {
           "201": {
             "description": "Success",
@@ -989,12 +1287,12 @@
                   "required": [
                     "data"
                   ],
-                  "additionalProperties": false,
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/Recipe"
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
               }
             }
@@ -1049,7 +1347,8 @@
               }
             }
           }
-        }
+        },
+        "operationId": "create_recipe"
       }
     },
     "/api/v1/recipes/{id}": {
@@ -1066,7 +1365,6 @@
             }
           }
         ],
-        "operationId": "get_recipe",
         "responses": {
           "200": {
             "description": "Success",
@@ -1077,12 +1375,12 @@
                   "required": [
                     "data"
                   ],
-                  "additionalProperties": false,
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/Recipe"
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
               }
             }
@@ -1117,7 +1415,8 @@
               }
             }
           }
-        }
+        },
+        "operationId": "get_recipe"
       },
       "delete": {
         "description": "Permanently delete a recipe and remove ALL its references from weekly meal plans. Ask the owner before doing this.",
@@ -1132,7 +1431,6 @@
             }
           }
         ],
-        "operationId": "delete_recipe",
         "responses": {
           "204": {
             "description": "Recipe and meal-plan references removed."
@@ -1167,10 +1465,11 @@
               }
             }
           }
-        }
+        },
+        "operationId": "delete_recipe"
       },
       "patch": {
-        "description": "Update selected fields. Omitted ingredients/steps remain unchanged; a supplied array replaces that entire collection. Empty arrays remove that collection. Read the latest recipe before replacing nested content.",
+        "description": "Update selected fields. Omitted ingredients/steps remain unchanged; a supplied array replaces that entire collection in array order. Preserve ingredient ref values when replacing ingredients, and update affected steps in the same request when removing referenced ingredients. Empty arrays remove that collection. Read the latest recipe before replacing nested content.",
         "parameters": [
           {
             "in": "path",
@@ -1182,7 +1481,6 @@
             }
           }
         ],
-        "operationId": "update_recipe",
         "responses": {
           "200": {
             "description": "Success",
@@ -1193,12 +1491,12 @@
                   "required": [
                     "data"
                   ],
-                  "additionalProperties": false,
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/Recipe"
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
               }
             }
@@ -1243,12 +1541,136 @@
               }
             }
           }
-        }
+        },
+        "operationId": "update_recipe"
+      }
+    },
+    "/api/v1/recipes/{id}/image": {
+      "post": {
+        "description": "Upload a JPEG, PNG or WebP file (maximum 5,000,000 bytes) to the cookbook's private R2 storage and update this recipe's photo and attribution. Requires a licence allowing this use. The returned image_url requires the owner's browser session to view; bucket credentials stay on the server. Repeating the same bytes uses the same storage key. Existing external image URLs remain supported. Returns 503 when storage is unconfigured or unavailable.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Recipe"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, or revoked token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in the owner's cookbook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Image storage is not configured or is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "image_credit",
+                  "image_source_url",
+                  "image_license"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "image_credit": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  },
+                  "image_source_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 20000
+                  },
+                  "image_license": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  },
+                  "image_match": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "approximate"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "operationId": "upload_recipe_image"
       }
     },
     "/api/v1/shopping-lists/{week}": {
       "get": {
-        "description": "Read aggregated ingredients from the week's planned recipes. Quantities are per recipe occurrence, not adjusted to diners. Shopping checkmarks are local to the browser and are not part of this API.",
+        "description": "Read aggregated ingredients from the week's planned recipes. Numeric quantities are summed as decimals for matching ingredient names and units; non-numeric amounts remain text. Quantities are per recipe occurrence, not adjusted to diners. Shopping checkmarks are not part of this API.",
         "parameters": [
           {
             "in": "path",
@@ -1261,7 +1683,6 @@
             }
           }
         ],
-        "operationId": "get_shopping_list",
         "responses": {
           "200": {
             "description": "Success",
@@ -1272,7 +1693,6 @@
                   "required": [
                     "data"
                   ],
-                  "additionalProperties": false,
                   "properties": {
                     "data": {
                       "type": "object",
@@ -1280,7 +1700,6 @@
                         "week_start",
                         "items"
                       ],
-                      "additionalProperties": false,
                       "properties": {
                         "items": {
                           "type": "array",
@@ -1291,31 +1710,33 @@
                               "quantity",
                               "unit"
                             ],
-                            "additionalProperties": false,
                             "properties": {
                               "name": {
                                 "type": "string"
                               },
                               "unit": {
                                 "type": "string",
-                                "nullable": true,
-                                "maxLength": 20000
+                                "maxLength": 20000,
+                                "nullable": true
                               },
                               "quantity": {
                                 "type": "string",
-                                "nullable": true,
-                                "maxLength": 20000
+                                "maxLength": 20000,
+                                "nullable": true
                               }
-                            }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "week_start": {
                           "type": "string",
                           "format": "date"
                         }
-                      }
+                      },
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
               }
             }
@@ -1350,18 +1771,9 @@
               }
             }
           }
-        }
+        },
+        "operationId": "get_shopping_list"
       }
     }
-  },
-  "security": [
-    {
-      "cookbookToken": []
-    }
-  ],
-  "servers": [
-    {
-      "url": "https://open-cookbook.fly.dev"
-    }
-  ]
+  }
 }

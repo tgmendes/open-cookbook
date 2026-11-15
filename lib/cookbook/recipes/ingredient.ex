@@ -46,6 +46,9 @@ defmodule Cookbook.Recipes.Ingredient do
   schema "ingredients" do
     field :name, :string
     field :quantity, :string
+    field :quantity_value, :decimal
+    field :quantity_text, :string
+    field :ref, :string
     field :unit, :string
     field :group_name, :string
     field :position, :integer, default: 0
@@ -55,7 +58,62 @@ defmodule Cookbook.Recipes.Ingredient do
 
   def changeset(ingredient, attrs) do
     ingredient
-    |> cast(attrs, [:name, :quantity, :unit, :group_name, :position])
+    |> cast(attrs, [
+      :name,
+      :quantity,
+      :quantity_value,
+      :quantity_text,
+      :ref,
+      :unit,
+      :group_name,
+      :position
+    ])
     |> validate_required([:name])
+    |> validate_length(:name, max: 255)
+    |> validate_length(:unit, max: 255)
+    |> validate_length(:group_name, max: 255)
+    |> validate_format(:ref, ~r/^[a-zA-Z0-9_-]{1,100}$/)
+    |> normalize_quantity(attrs)
+    |> validate_number(:quantity_value,
+      greater_than_or_equal_to: 0,
+      less_than_or_equal_to: 1_000_000_000
+    )
+    |> validate_length(:quantity, max: 255)
+    |> validate_length(:quantity_text, max: 255)
+    |> ensure_ref()
+    |> unique_constraint([:recipe_id, :ref])
+    |> check_constraint(:quantity_value, name: :quantity_value_nonnegative)
+  end
+
+  defp ensure_ref(changeset) do
+    if get_field(changeset, :ref),
+      do: changeset,
+      else: put_change(changeset, :ref, Ecto.UUID.generate())
+  end
+
+  defp normalize_quantity(changeset, attrs) do
+    legacy? = Map.has_key?(attrs, "quantity") or Map.has_key?(attrs, :quantity)
+
+    structured? =
+      Enum.any?(
+        ["quantity_value", :quantity_value, "quantity_text", :quantity_text],
+        &Map.has_key?(attrs, &1)
+      )
+
+    changeset =
+      if legacy? and not structured? do
+        text = get_field(changeset, :quantity)
+
+        changeset
+        |> put_change(:quantity_text, text)
+        |> put_change(:quantity_value, Cookbook.Recipes.Quantity.parse(text))
+      else
+        changeset
+      end
+
+    value = get_field(changeset, :quantity_value)
+    text = get_field(changeset, :quantity_text)
+    display = if value, do: text || Cookbook.Recipes.Quantity.format(value), else: text
+    put_change(changeset, :quantity, display)
   end
 end

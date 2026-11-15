@@ -10,6 +10,7 @@ defmodule CookbookWeb.RecipeListLive do
        tags: Recipes.list_tags(socket.assigns.current_user.id),
        search: "",
        selected_tag: nil,
+       freezer_only: false,
        sort: "recent",
        planning_recipe: nil,
        page_title: "Recipes",
@@ -27,6 +28,7 @@ defmodule CookbookWeb.RecipeListLive do
      |> assign(
        search: params["search"] || "",
        selected_tag: if(params["tag"] in [nil, ""], do: nil, else: params["tag"]),
+       freezer_only: params["freezer_friendly"] == "true",
        sort: params["sort"] || "recent"
      )
      |> refresh()}
@@ -37,6 +39,10 @@ defmodule CookbookWeb.RecipeListLive do
 
   def handle_event("filter_tag", %{"tag" => tag}, socket), do: patch_filters(socket, %{tag: tag})
   def handle_event("sort", %{"sort" => sort}, socket), do: patch_filters(socket, %{sort: sort})
+
+  def handle_event("freezer", _, socket),
+    do: patch_filters(socket, %{freezer_friendly: to_string(!socket.assigns.freezer_only)})
+
   def handle_event("close-plan", _, socket), do: {:noreply, assign(socket, planning_recipe: nil)}
 
   def handle_event("delete", %{"id" => id}, socket) do
@@ -79,7 +85,8 @@ defmodule CookbookWeb.RecipeListLive do
         %{
           search: socket.assigns.search,
           tag: socket.assigns.selected_tag || "",
-          sort: socket.assigns.sort
+          sort: socket.assigns.sort,
+          freezer_friendly: to_string(socket.assigns.freezer_only)
         },
         changes
       )
@@ -91,7 +98,8 @@ defmodule CookbookWeb.RecipeListLive do
     recipes =
       Recipes.list_recipes(socket.assigns.current_user.id,
         search: socket.assigns.search,
-        tag: socket.assigns.selected_tag
+        tag: socket.assigns.selected_tag,
+        freezer_friendly: if(socket.assigns.freezer_only, do: true, else: nil)
       )
 
     recipes =
@@ -155,10 +163,12 @@ defmodule CookbookWeb.RecipeListLive do
             <.link navigate={~p"/settings/connections"} class="action">
               <.icon name="hero-link" class="size-4" />Connect Claude
             </.link>
-            <.link navigate={~p"/recipes/new"} class="action action-primary"><.icon
-              name="hero-plus"
-              class="size-4"
-            />New recipe</.link>
+            <.link navigate={~p"/recipes/new"} class="action action-primary">
+              <.icon
+                name="hero-plus"
+                class="size-4"
+              />New recipe
+            </.link>
           </div>
         </header>
         <section aria-label="Find a recipe" class="space-y-3.5">
@@ -183,6 +193,14 @@ defmodule CookbookWeb.RecipeListLive do
           </.form>
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div id="recipe-filters" class="flex flex-wrap gap-2">
+              <button
+                id="freezer-filter"
+                phx-click="freezer"
+                aria-pressed={to_string(@freezer_only)}
+                class={["action !rounded-full", @freezer_only && "!bg-teal-tint !text-teal-ink"]}
+              >
+                Freezer friendly
+              </button>
               <button
                 :for={tag <- ["" | @tags]}
                 phx-click="filter_tag"

@@ -18,6 +18,7 @@ defmodule Cookbook.Recipes do
     |> where(user_id: ^user_id)
     |> maybe_search(search)
     |> maybe_filter_tag(tag)
+    |> maybe_filter_freezer(Keyword.get(opts, :freezer_friendly))
     |> order_by([r], desc: r.updated_at)
     |> order_by([r], asc: r.id)
     |> maybe_paginate(opts)
@@ -90,6 +91,9 @@ defmodule Cookbook.Recipes do
   defp maybe_filter_tag(query, tag) do
     from r in query, where: ^tag in r.tags
   end
+
+  defp maybe_filter_freezer(query, nil), do: query
+  defp maybe_filter_freezer(query, value), do: where(query, [r], r.freezer_friendly == ^value)
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking recipe changes.

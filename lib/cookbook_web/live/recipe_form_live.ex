@@ -13,9 +13,25 @@ defmodule CookbookWeb.RecipeFormLive do
     params = %{
       "tags_input" => Enum.join(recipe.tags || [], ", "),
       "ingredients" =>
-        indexed(recipe.ingredients, [:id, :name, :quantity, :unit, :group_name, :position]),
+        indexed(recipe.ingredients, [
+          :id,
+          :name,
+          :quantity_value,
+          :quantity_text,
+          :ref,
+          :unit,
+          :group_name,
+          :position
+        ]),
       "steps" =>
-        indexed(recipe.steps, [:id, :instruction, :short_title, :duration_minutes, :position])
+        indexed(recipe.steps, [
+          :id,
+          :instruction,
+          :short_title,
+          :duration_minutes,
+          :position,
+          :ingredient_refs
+        ])
     }
 
     {:ok,
@@ -60,7 +76,14 @@ defmodule CookbookWeb.RecipeFormLive do
   end
 
   def handle_event("add_ingredient", _, socket),
-    do: add_item(socket, "ingredients", %{"name" => "", "quantity" => "", "unit" => ""})
+    do:
+      add_item(socket, "ingredients", %{
+        "name" => "",
+        "quantity_value" => "",
+        "quantity_text" => "",
+        "ref" => Ecto.UUID.generate(),
+        "unit" => ""
+      })
 
   def handle_event("add_step", _, socket), do: add_item(socket, "steps", %{"instruction" => ""})
 
@@ -124,6 +147,17 @@ defmodule CookbookWeb.RecipeFormLive do
         |> Map.get(collection, %{})
         |> Enum.sort_by(fn {key, _} -> String.to_integer(key) end)
         |> Enum.with_index(fn {_, attrs}, index ->
+          attrs =
+            if collection == "steps",
+              do:
+                Map.update(
+                  attrs,
+                  "ingredient_refs",
+                  [],
+                  &Enum.reject(&1, fn ref -> ref == "" end)
+                ),
+              else: attrs
+
           {to_string(index), Map.put(attrs, "position", index)}
         end)
         |> Map.new()
@@ -142,6 +176,15 @@ defmodule CookbookWeb.RecipeFormLive do
   end
 
   def render(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :ingredient_options,
+        assigns.recipe_params["ingredients"]
+        |> Enum.sort_by(fn {key, _} -> String.to_integer(key) end)
+        |> Enum.map(fn {_, row} -> {row["name"] || "Ingredient", row["ref"]} end)
+      )
+
     ~H"""
     <Layouts.app {assigns}>
       <div class="mx-auto max-w-3xl space-y-6">
@@ -188,18 +231,26 @@ defmodule CookbookWeb.RecipeFormLive do
             </div>
             <.inputs_for :let={ing} field={@form[:ingredients]}>
               <div id={"ingredient-row-#{ing.index}"} class="space-y-3 rounded-2xl bg-tag p-3">
+                <.input field={ing[:ref]} type="hidden" />
                 <.input
                   field={ing[:name]}
                   label={"Ingredient #{ing.index + 1}"}
                   placeholder="Ingredient name"
                 />
                 <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px] items-end gap-2">
-                  <.input field={ing[:quantity]} label="Quantity" /><.input
+                  <.input
+                    field={ing[:quantity_value]}
+                    type="number"
+                    step="any"
+                    min="0"
+                    label="Quantity (number)"
+                  /><.input
                     field={ing[:unit]}
                     type="select"
                     label="Unit"
                     options={Ingredient.unit_options(@current_user.unit_system)}
-                  /><button
+                  />
+                  <button
                     id={"remove-ingredient-#{ing.index}"}
                     type="button"
                     phx-click="remove_item"
@@ -211,6 +262,11 @@ defmodule CookbookWeb.RecipeFormLive do
                     <.icon name="hero-trash" class="size-5" />
                   </button>
                 </div>
+                <.input
+                  field={ing[:quantity_text]}
+                  label="Display quantity (optional)"
+                  placeholder="e.g. 1/2 or to taste"
+                />
                 <.input field={ing[:group_name]} label="Group (optional)" />
               </div>
             </.inputs_for>
@@ -248,8 +304,24 @@ defmodule CookbookWeb.RecipeFormLive do
                   min="0"
                   label="Timer (minutes, optional)"
                 />
+                <input type="hidden" name={step[:ingredient_refs].name <> "[]"} value="" />
+                <.input
+                  field={step[:ingredient_refs]}
+                  type="select"
+                  multiple
+                  options={@ingredient_options}
+                  label="Ingredients used in this step"
+                />
               </div>
             </.inputs_for>
+          </section>
+          <section class="surface space-y-4 p-5 sm:p-6">
+            <h2 class="text-xl">Kitchen advice</h2>
+            <.input field={@form[:prep_ahead]} type="textarea" label="Prep ahead" />
+            <.input field={@form[:freezer_friendly]} type="checkbox" label="Freezer friendly" />
+            <.input field={@form[:freezer_notes]} type="textarea" label="Freezing & reheating" />
+            <.input field={@form[:troubleshooting]} type="textarea" label="If it goes wrong" />
+            <.input field={@form[:variations]} type="textarea" label="Swaps & scaling" />
           </section>
           <section class="surface space-y-4 p-5 sm:p-6">
             <h2 class="text-xl">Make it yours</h2>
@@ -263,7 +335,18 @@ defmodule CookbookWeb.RecipeFormLive do
               field={@form[:source_url]}
               type="url"
               label="Source URL"
-            /><.input field={@form[:notes]} type="textarea" label="Kitchen notes" />
+            /><.input field={@form[:notes]} type="textarea" label="Other notes" />
+            <.input field={@form[:source_conversation_url]} type="url" label="Source conversation" />
+            <.input field={@form[:image_credit]} label="Photo credit" />
+            <.input field={@form[:image_source_url]} type="url" label="Photo source" />
+            <.input field={@form[:image_license]} label="Photo licence" />
+            <.input
+              field={@form[:image_match]}
+              type="select"
+              prompt="Not specified"
+              options={[{"Exact recipe", :exact}, {"Approximate match", :approximate}]}
+              label="Photo match"
+            />
           </section>
           <div class="flex flex-wrap gap-3">
             <button
@@ -273,7 +356,8 @@ defmodule CookbookWeb.RecipeFormLive do
               class="action action-primary"
             >
               Save recipe <.icon name="hero-check" class="size-4" />
-            </button><.link
+            </button>
+            <.link
               navigate={if @recipe.id, do: ~p"/recipes/#{@recipe.id}", else: ~p"/recipes"}
               class="action"
             >Cancel</.link>

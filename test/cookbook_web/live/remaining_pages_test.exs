@@ -56,7 +56,7 @@ defmodule CookbookWeb.RemainingPagesTest do
     |> form("#recipe-form",
       recipe: %{
         title: "Toast",
-        ingredients: %{"0" => %{name: "Bread", quantity: "1"}},
+        ingredients: %{"0" => %{name: "Bread", quantity_value: "1"}},
         steps: %{"0" => %{instruction: "Toast the bread", short_title: "Toast"}}
       }
     )

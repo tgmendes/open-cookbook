@@ -1,14 +1,16 @@
 defmodule CookbookWeb.ApiInput do
   @moduledoc false
 
-  @strings ~w(title description source_url source_type image_url notes)
+  @strings ~w(title description source_url source_type image_url notes prep_ahead troubleshooting variations freezer_notes source_conversation_url image_credit image_source_url image_license image_match)
   @numbers ~w(servings prep_time_minutes cook_time_minutes)
-  @fields @strings ++ @numbers ++ ~w(tags ingredients steps)
+  @fields @strings ++ @numbers ++ ~w(tags ingredients steps freezer_friendly)
 
   def recipe(attrs) when is_map(attrs) do
     with true <- Enum.all?(Map.keys(attrs), &(&1 in @fields)),
          true <- Enum.all?(@strings, &valid_string?(attrs[&1])),
          true <- Enum.all?(@numbers, &(is_nil(attrs[&1]) or is_integer(attrs[&1]))),
+         true <-
+           not Map.has_key?(attrs, "freezer_friendly") or is_boolean(attrs["freezer_friendly"]),
          true <-
            not Map.has_key?(attrs, "tags") or
              (is_list(attrs["tags"]) and length(attrs["tags"]) <= 100 and
@@ -20,14 +22,14 @@ defmodule CookbookWeb.ApiInput do
            collection(
              attrs,
              "ingredients",
-             ~w(name quantity unit group_name),
-             ~w(name quantity unit group_name)
+             ~w(name quantity quantity_value quantity_text ref unit group_name),
+             ~w(name quantity quantity_text ref unit group_name)
            ),
          {:ok, attrs} <-
            collection(
              attrs,
              "steps",
-             ~w(instruction short_title duration_minutes),
+             ~w(instruction short_title duration_minutes ingredient_refs),
              ~w(instruction short_title)
            ) do
       {:ok, attrs}
@@ -49,6 +51,11 @@ defmodule CookbookWeb.ApiInput do
            Enum.all?(items, fn item ->
              is_map(item) and Enum.all?(Map.keys(item), &(&1 in allowed)) and
                Enum.all?(strings, &valid_string?(item[&1])) and
+               (key != "ingredients" or is_nil(item["quantity_value"]) or
+                  is_number(item["quantity_value"])) and
+               (key != "steps" or not Map.has_key?(item, "ingredient_refs") or
+                  (is_list(item["ingredient_refs"]) and length(item["ingredient_refs"]) <= 200 and
+                     Enum.all?(item["ingredient_refs"], &is_binary/1))) and
                (key != "steps" or is_nil(item["duration_minutes"]) or
                   is_integer(item["duration_minutes"]))
            end) do
@@ -66,14 +73,27 @@ defmodule CookbookWeb.ApiInput do
 
   def pagination(params) do
     with true <- Enum.all?(~w(search tag), &(is_nil(params[&1]) or is_binary(params[&1]))),
+         {:ok, freezer} <- boolean(params["freezer_friendly"]),
          {:ok, limit} <- integer(Map.get(params, "limit", "50")),
          {:ok, offset} <- integer(Map.get(params, "offset", "0")),
          true <- limit in 1..100 and offset >= 0 do
-      {:ok, [search: params["search"], tag: params["tag"], limit: limit, offset: offset]}
+      {:ok,
+       [
+         search: params["search"],
+         tag: params["tag"],
+         freezer_friendly: freezer,
+         limit: limit,
+         offset: offset
+       ]}
     else
       _ -> {:error, :invalid_input}
     end
   end
+
+  defp boolean(nil), do: {:ok, nil}
+  defp boolean("true"), do: {:ok, true}
+  defp boolean("false"), do: {:ok, false}
+  defp boolean(_), do: {:error, :invalid_input}
 
   def integer(value) when is_binary(value) do
     case Integer.parse(value) do

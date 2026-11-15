@@ -14,6 +14,7 @@ defmodule CookbookWeb.ApiFallbackController do
       case reason do
         :not_found -> {:not_found, "not_found"}
         :conflict -> {:conflict, "conflict"}
+        :storage_unavailable -> {:service_unavailable, "storage_unavailable"}
         _ -> {:unprocessable_entity, "validation_error"}
       end
 

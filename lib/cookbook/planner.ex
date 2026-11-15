@@ -322,70 +322,16 @@ defmodule Cookbook.Planner do
   end
 
   defp merge_quantities(ingredients) do
-    quantities = Enum.map(ingredients, & &1.quantity)
+    values =
+      Enum.map(ingredients, &(&1.quantity_value || Cookbook.Recipes.Quantity.parse(&1.quantity)))
 
-    if Enum.all?(quantities, &numeric?/1) do
-      quantities
-      |> Enum.map(&parse_number/1)
-      |> Enum.sum()
-      |> format_number()
+    if Enum.all?(values, &(&1 != nil)) do
+      values |> Enum.reduce(Decimal.new(0), &Decimal.add/2) |> Cookbook.Recipes.Quantity.format()
     else
-      Enum.join(quantities, " + ")
+      ingredients
+      |> Enum.map(& &1.quantity)
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.join(" + ")
     end
   end
-
-  defp numeric?(nil), do: false
-  defp numeric?(""), do: false
-
-  defp numeric?(str) do
-    str = String.trim(str)
-    # Match: "2", "0.5", "1/3", "1 1/2"
-    Regex.match?(~r/^\d+(\.\d+)?$/, str) ||
-      Regex.match?(~r/^\d+\/\d+$/, str) ||
-      Regex.match?(~r/^\d+\s+\d+\/\d+$/, str)
-  end
-
-  defp parse_number(nil), do: 0.0
-  defp parse_number(""), do: 0.0
-
-  defp parse_number(str) do
-    str = String.trim(str)
-
-    cond do
-      # Mixed fraction: "1 1/2"
-      Regex.match?(~r/^\d+\s+\d+\/\d+$/, str) ->
-        [whole, frac] = String.split(str, ~r/\s+/, parts: 2)
-        parse_float(whole) + parse_fraction(frac)
-
-      # Simple fraction: "1/3"
-      Regex.match?(~r/^\d+\/\d+$/, str) ->
-        parse_fraction(str)
-
-      # Regular number
-      true ->
-        parse_float(str)
-    end
-  end
-
-  defp parse_fraction(str) do
-    case String.split(str, "/") do
-      [num, den] ->
-        n = parse_float(num)
-        d = parse_float(den)
-        if d == 0.0, do: 0.0, else: n / d
-
-      _ ->
-        0.0
-    end
-  end
-
-  defp parse_float(str) do
-    case Float.parse(str) do
-      {n, _} -> n
-      :error -> 0.0
-    end
-  end
-
-  defp format_number(n) when n == trunc(n), do: to_string(trunc(n))
-  defp format_number(n), do: :erlang.float_to_binary(n, decimals: 1)
 end

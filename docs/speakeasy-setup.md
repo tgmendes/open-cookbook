@@ -56,11 +56,13 @@ Do not report setup as complete until the real deployed connection passes these 
 - Read the profile before generating recipes to respect the unit preference.
 - Use a fresh `Idempotency-Key` of 1–128 characters for each intentional recipe creation. Reuse it for the same body on retries for up to 24 hours. A changed body with the same key returns 409.
 - Replay returns the original create response, even if that recipe was subsequently edited or deleted. Read the recipe to check its current state.
-- Search uses `search` and `tag`. Pagination defaults to 50 recipes, allows at most 100, and returns `meta.has_more` and `meta.offset`.
+- Search uses `search`, `tag`, and optional `freezer_friendly=true` or `false`. Pagination defaults to 50 recipes, allows at most 100, and returns `meta.has_more` and `meta.offset`.
 - `PATCH` preserves omitted fields. Supplied ingredient and step arrays replace the respective collection in array order; send `[]` to clear one.
 - Use `PUT` to replace one lunch or dinner slot. Monday is day 1 and Sunday is day 7. Empty `recipe_ids` clears the slot. Read the current slot before appending recipes so existing entries are not lost.
 - Deleting a recipe also removes its meal-plan references. Ask the owner before invoking deletion.
-- Shopping quantities reflect each planned occurrence of the stored recipe. Browser checkmarks are not persisted or exposed by the API.
+- Shopping quantities reflect each planned occurrence of the stored recipe. Checkmarks are persisted in the app but aren't exposed by the API.
+- Use the structured notes, quantities, and ingredient references described in [Import recipe cards](../README.md#import-recipe-cards). Refresh the imported OpenAPI source when the API changes; deployment alone doesn't update generated MCP tools.
+- Photo uploads use `POST /api/v1/recipes/{id}/image` with a multipart file and attribution. They require separately configured R2 storage. If your MCP integration doesn't support multipart uploads, use an authenticated HTTP upload outside that integration; don't put credentials in tool arguments.
 
 ## Rotate or roll back
 
